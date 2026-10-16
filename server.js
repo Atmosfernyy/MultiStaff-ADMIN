@@ -89,6 +89,11 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(400).json({ error: 'Введіть коректний ID та пароль.' });
   }
 
+  const missingProjects = PROJECTS.filter(project => !process.env[project.env]);
+  if (missingProjects.length) {
+    return res.status(503).json({ error: 'Не налаштовано Firebase для всіх кінотеатрів: ' + missingProjects.map(project => project.label).join(', ') + '.' });
+  }
+
   try {
     const matches = [];
     for (const project of PROJECTS) {
