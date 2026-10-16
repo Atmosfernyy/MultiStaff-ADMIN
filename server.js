@@ -36,8 +36,22 @@ app.use(helmet({
   }
 }));
 app.use(express.json({ limit: '32kb' }));
-app.use('/api', rateLimit({ windowMs: 60000, limit: 60, standardHeaders: 'draft-7', legacyHeaders: false }));
-app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false }));
+const apiRateLimit = rateLimit({
+  windowMs: 60000,
+  limit: 60,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  handler: (_req, res) => res.status(429).json({ error: 'Забагато запитів. Зачекайте хвилину та спробуйте знову.' })
+});
+const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  handler: (_req, res) => res.status(429).json({ error: 'Забагато спроб входу. Зачекайте до 15 хвилин перед наступною спробою.' })
+});
+app.use('/api/auth/login', loginRateLimit);
+app.use('/api', apiRateLimit);
 
 if (sessionSecret) {
   app.use(cookieSession({
