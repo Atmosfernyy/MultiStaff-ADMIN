@@ -92,7 +92,7 @@ function publicError(res, error) {
   console.error('Management API error:', error.message);
   res.status(error.status || 500).json({ error: error.status ? error.message : 'Не вдалося виконати операцію. Перевірте логи сервера.' });
 }
-function toPlainDoc(doc) { return { id: doc.id, ...doc.data() }; }
+function toPlainDoc(doc) { return { ...doc.data(), id: doc.id }; }
 
 app.get('/api/health', (_req, res) => {
   const configuredProjects = PROJECTS.filter(project => Boolean(process.env[project.env])).map(project => project.key);
@@ -175,7 +175,7 @@ app.post('/api/manage/staff', async (req, res) => {
     };
     await ref.set(data);
     await writeAudit(req, 'staff.create', id, { name, userRole });
-    res.status(201).json({ item: { id, ...data } });
+    res.status(201).json({ item: { ...data, id } });
   } catch (error) { publicError(res, error); }
 });
 app.put('/api/manage/staff/:id', async (req, res) => {
@@ -222,7 +222,7 @@ app.get('/api/manage/recipes', async (req, res) => {
   try {
     const snap = await dbForSession(req).collection('Cinema').doc(req.session.cinema).collection('Recipes').get();
     res.set('Cache-Control', 'no-store');
-    res.json({ items: snap.docs.map(toPlainDoc).sort((a, b) => a.id.localeCompare(b.id, 'uk')) });
+    res.json({ items: snap.docs.map(doc => ({ ...doc.data(), documentId: doc.id, recipeId: doc.data().id || doc.id, id: doc.id })).sort((a, b) => a.id.localeCompare(b.id, 'uk')) });
   } catch (error) { publicError(res, error); }
 });
 app.post('/api/manage/recipes', async (req, res) => {
@@ -241,18 +241,10 @@ app.put('/api/manage/recipes/:id', async (req, res) => {
     const id = safeId(req.params.id);
     const ref = dbForSession(req).collection('Cinema').doc(req.session.cinema).collection('Recipes').doc(id);
     if (!(await ref.get()).exists) throw Object.assign(new Error('Рецепт не знайдено.'), { status: 404 });
-    const data = normalizeRecipe({ ...req.body, id: req.body?.recipeId || id });
-    const targetId = safeId(req.body?.recipeId || id);
-    if (targetId !== id) {
-      const target = ref.parent.doc(targetId);
-      if ((await target.get()).exists) throw Object.assign(new Error('Рецепт з такою назвою вже існує.'), { status: 409 });
-      const batch = dbForSession(req).batch();
-      batch.set(target, data);
-      batch.delete(ref);
-      await batch.commit();
-    } else await ref.set(data);
-    await writeAudit(req, 'recipe.update', targetId, { previousId: id });
-    res.json({ ok: true, item: { id: targetId, ...data } });
+    const data = normalizeRecipe({ id: req.body?.recipeId || id, recipeId: req.body?.recipeId || id, ingredients: req.body?.ingredients });
+    await ref.set(data);
+    await writeAudit(req, 'recipe.update', id, { ingredientCount: Object.keys(data).length - 1 });
+    res.json({ ok: true, item: { id, ...data } });
   } catch (error) { publicError(res, error); }
 });
 app.delete('/api/manage/recipes/:id', async (req, res) => {
