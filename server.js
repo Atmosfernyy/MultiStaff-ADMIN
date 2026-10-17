@@ -363,4 +363,4 @@ app.use(express.static(ROOT, {
   maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0, etag: true
 }));
 app.get('*', (_req, res) => res.sendFile(path.join(ROOT, 'index.html')));
-app.listen(PORT, '0.0.0.0', () => console.log(\`MultiStaff ADMIN listening on port \${PORT}\`));
+app.listen(PORT, '0.0.0.0', () => console.log('MultiStaff ADMIN listening on port ' + PORT));
