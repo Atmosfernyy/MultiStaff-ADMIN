@@ -15,6 +15,8 @@ let writeoffsCache = [];
 let editingStaffId = null;
 let editingRecipeId = null;
 let editingWriteoffId = null;
+let developerUnlocked = false;
+let featureCinema = 'atmosfera';
 
 function toast(msg) {
   const el = document.querySelector('#toast');
@@ -46,7 +48,7 @@ async function api(url, options = {}) {
   const raw = await response.text();
   let data = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch { throw new Error('Сервер повернув неочікувану відповідь. Перевірте логи Northflank.'); }
-  if (response.status === 401) { showLogin('Сесія завершилася. Увійдіть ще раз.'); throw new Error(data.error || 'Потрібно увійти.'); }
+  if (response.status === 401 && !url.startsWith('/api/developer/')) { showLogin('Сесія завершилася. Увійдіть ще раз.'); throw new Error(data.error || 'Потрібно увійти.'); }
   if (!response.ok) throw new Error(data.error || 'Не вдалося виконати операцію.');
   return data;
 }
@@ -94,9 +96,67 @@ function showPage(key) {
   if (currentPage === 'staff') loadStaff();
   else if (currentPage === 'data') renderDataPage();
   else if (currentPage === 'activity') loadActivity();
-  else if (currentPage === 'features') workspace.innerHTML = '<section class="panel"><h2>Функції бота</h2><p class="muted">Керування функціями бота буде підключено окремим етапом після узгодження схеми BotConfig.</p></section>';
+  else if (currentPage === 'features') openDeveloperFeatures();
   else if (currentPage === 'diagnostics') loadDiagnostics();
 }
+
+function developerGate() {
+  let overlay = document.querySelector('#developerGate');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'developerGate';
+    overlay.className = 'developer-gate';
+    overlay.innerHTML = '<form id="developerLoginForm" class="developer-card"><button type="button" class="gate-close" aria-label="Закрити" data-action="developer-close">×</button><div class="brand login-brand"><span class="logo">M</span><span><b>MULTISTAFF</b><small>DEVELOPER ACCESS</small></span></div><p class="eyebrow red">PRIVILEGED WORKSPACE</p><h2>Developer-авторизація</h2><p class="muted">Основна панель залишиться позаду. Повторно введіть окремий Developer-логін і пароль, щоб керувати функціями ботів у різних кінотеатрах.</p><label for="developerLogin">Developer-логін</label><input id="developerLogin" name="login" autocomplete="username" required maxlength="128"><label for="developerPassword">Пароль</label><input id="developerPassword" name="password" type="password" autocomplete="current-password" required maxlength="256"><p id="developerLoginError" class="login-error" role="alert"></p><button class="login-submit" type="submit">Відкрити керування</button><small class="login-footnote">Доступ перевіряється сервером. Облікові дані не зберігаються у браузері.</small></form>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector('button[type="submit"]');
+      const errorEl = form.querySelector('#developerLoginError');
+      button.disabled = true; button.textContent = 'Перевіряємо…'; errorEl.textContent = '';
+      try {
+        await api('/api/developer/login', { method: 'POST', body: JSON.stringify({ login: form.elements.login.value, password: form.elements.password.value }) });
+        developerUnlocked = true;
+        form.reset();
+        overlay.remove();
+        document.body.classList.remove('developer-locked');
+        await loadBotFeatures(featureCinema);
+      } catch (error) { errorEl.textContent = error.message; }
+      finally { if (button.isConnected) { button.disabled = false; button.textContent = 'Відкрити керування'; } }
+    });
+  }
+  document.body.classList.add('developer-locked');
+  overlay.hidden = false;
+  setTimeout(() => overlay.querySelector('input[name="login"]')?.focus(), 0);
+}
+async function openDeveloperFeatures() {
+  if (!developerUnlocked) {
+    try {
+      const state = await api('/api/developer/me');
+      developerUnlocked = state.authenticated === true;
+    } catch { developerUnlocked = false; }
+  }
+  if (developerUnlocked) return loadBotFeatures(featureCinema);
+  workspace().innerHTML = '<section class="panel"><h2>Функції бота</h2><p class="muted">Цей розділ потребує окремого Developer-входу.</p><button class="primary" data-action="developer-login">Увійти як Developer</button></section>';
+  developerGate();
+}
+async function loadBotFeatures(cinema) {
+  featureCinema = cinema || featureCinema;
+  try {
+    const result = await api('/api/developer/features/' + encodeURIComponent(featureCinema));
+    const entries = Object.entries(result.features || {});
+    workspace().innerHTML = '<section class="panel">' +
+      '<div class="workspace-head"><div><h2>Глобальне керування ботом</h2><p class="muted">Окремий Developer-доступ · зміни зберігаються у Firebase вибраного кінотеатру.</p></div><button data-action="developer-logout">Вийти з Developer</button></div>' +
+      '<div class="feature-toolbar"><label for="featureCinema">Кінотеатр</label><select id="featureCinema"><option value="atmosfera" ' + (featureCinema === 'atmosfera' ? 'selected' : '') + '>Atmosfera</option><option value="karavan" ' + (featureCinema === 'karavan' ? 'selected' : '') + '>Karavan</option><option value="retroville" ' + (featureCinema === 'retroville' ? 'selected' : '') + '>Retroville</option></select><span class="pill ' + (result.configured ? 'success' : 'warning') + '">' + (result.configured ? 'Конфігурацію знайдено' : 'Створюється під час першої зміни') + '</span></div>' +
+      '<div class="feature-list">' + entries.map(([key, feature]) => '<article class="feature-row"><div><b>' + escapeHtml(feature.label || key) + '</b><small><code>' + escapeHtml(key) + '</code></small></div><label class="switch"><input type="checkbox" data-action="bot-toggle" data-feature="' + escapeHtml(key) + '" ' + (feature.enabled ? 'checked' : '') + '><span></span></label><strong class="feature-state ' + (feature.enabled ? 'on' : 'off') + '">' + (feature.enabled ? 'Увімкнено' : 'Вимкнено') + '</strong></article>').join('') + '</div>' +
+      '<p class="muted small">Прапорці записуються в <code>Cinema/' + escapeHtml(featureCinema) + '/BotConfig/features</code>. Щоб перемикання реально впливали на Telegram-бот, бот має читати ці самі ключі.</p></section>';
+    document.querySelector('#featureCinema').addEventListener('change', event => loadBotFeatures(event.target.value));
+  } catch (error) {
+    workspace().innerHTML = '<section class="panel"><h2>Не вдалося завантажити функції</h2><p class="form-error">' + escapeHtml(error.message) + '</p><button data-action="developer-login">Повторити вхід</button></section>';
+    if (error.message.includes('Developer-авторизація')) { developerUnlocked = false; developerGate(); }
+  }
+}
+
 function workspace() { return document.querySelector('#workspace'); }
 function panelHeader(title, subtitle, actionLabel, action) {
   return '<div class="workspace-head"><div><h2>' + escapeHtml(title) + '</h2><p class="muted">' + escapeHtml(subtitle) + '</p></div>' +
