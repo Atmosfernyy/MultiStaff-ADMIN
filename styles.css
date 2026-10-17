@@ -4,3 +4,62 @@
 
 
 .login-screen{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at top,#27232a 0,#101114 55%);overflow:auto}.login-screen[hidden]{display:none}.login-card{width:min(100%,420px);padding:34px;border:1px solid #34353d;border-radius:22px;background:#17181d;box-shadow:0 24px 80px #0008;display:flex;flex-direction:column;gap:12px}.login-brand{display:flex;align-items:center;gap:12px;margin-bottom:18px;color:#f4f4f6;text-decoration:none}.login-brand .logo{display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:#e3424b;color:#fff;font-weight:800;font-size:22px}.login-brand small{display:block;color:#92939d;font-size:10px;letter-spacing:1.5px;margin-top:3px}.login-card .eyebrow{margin:0}.login-card h1{margin:0;font-size:28px;color:#f7f7f9}.login-subtitle{margin:0 0 10px;color:#a4a5af;line-height:1.5;font-size:14px}.login-card label{font-size:13px;color:#c7c8d0;margin-top:4px}.login-card input{width:100%;box-sizing:border-box;padding:13px 14px;border:1px solid #383943;border-radius:10px;background:#101115;color:#f7f7f9;font:inherit;outline:none}.login-card input:focus{border-color:#e3424b;box-shadow:0 0 0 3px #e3424b22}.login-submit{border:0;border-radius:10px;background:#e3424b;color:white;font:inherit;font-weight:700;padding:13px;cursor:pointer;margin-top:6px}.login-submit:disabled{opacity:.65;cursor:wait}.login-error{color:#ff858b;font-size:13px;min-height:18px;margin:0}.login-footnote{text-align:center;color:#777985;font-size:11px;line-height:1.5;margin-top:4px}
+
+
+/* Management workspace */
+#workspace[hidden]{display:none}
+#workspace{display:grid;gap:16px;margin-bottom:28px;min-width:0}
+.workspace-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px}
+.workspace-head h2{font-size:18px;margin:0 0 6px}
+.workspace-head p{margin:0}
+.muted{color:var(--muted);font-size:12px;line-height:1.6}
+.small{font-size:11px}
+.primary,.button-row button,.workspace-head>button,.data-tabs button{border:1px solid var(--border);border-radius:9px;background:#202229;color:var(--text);padding:10px 13px;font:inherit;font-size:12px;cursor:pointer}
+.primary{background:var(--red);border-color:var(--red);color:white;font-weight:700}
+.primary:hover{filter:brightness(1.08)}
+.button-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.button-row button:hover,.workspace-head>button:hover,.data-tabs button:hover{border-color:#626572}
+.button-row .danger-button{color:#ff858b;border-color:#6a343a;background:#24191d}
+.record-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.record-card{border:1px solid var(--border);border-radius:12px;background:linear-gradient(145deg,#1b1d23,#17191e);padding:17px;min-width:0}
+.record-top{display:flex;align-items:center;gap:11px;min-width:0;margin-bottom:15px}
+.record-title{display:grid;gap:5px;min-width:0;flex:1}
+.record-title b{font-size:14px;overflow-wrap:anywhere}
+.record-title small,.record-meta small{font-size:10px;color:var(--muted)}
+.avatar{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:#ed3b481b;border:1px solid #ed3b4840;color:#ff6873;font-weight:800;font-size:17px;flex-shrink:0}
+.pill{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;padding:5px 9px;border-radius:20px;background:#252730;color:#bfc0cb;font-size:10px}
+.pill.success{background:#16352c;color:#69ddb0}
+.pill.danger{background:#3a2025;color:#ff8991}
+.record-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:10px 0 14px}
+.record-meta>div{display:grid;gap:5px;min-width:0}
+.record-meta b{font-size:12px;overflow-wrap:anywhere}
+.empty-state{border:1px dashed #3a3c46;border-radius:11px;padding:35px 18px;text-align:center;color:var(--muted);font-size:13px}
+.data-tabs{display:flex;gap:8px;flex-wrap:wrap}
+.data-tabs button.selected{background:#ed3b4820;border-color:#ed3b4866;color:#ff7780}
+.ingredient-list{display:grid;gap:0;margin-top:8px}
+.ingredient-list>div{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:8px 0;border-bottom:1px solid #292b32;font-size:12px}
+.ingredient-list>div:last-child{border-bottom:0}
+.ingredient-list span{color:#c4c5ce;overflow-wrap:anywhere}
+.ingredient-list b{white-space:nowrap;font-variant-numeric:tabular-nums}
+.writeoff-items{display:grid;gap:9px;margin:12px 0}
+.writeoff-items>div{display:flex;justify-content:space-between;gap:12px;font-size:12px}
+.writeoff-items small{color:var(--muted);white-space:nowrap}
+details{border-top:1px solid #2c2e37;border-bottom:1px solid #2c2e37;padding:10px 0;margin-top:12px}
+summary{cursor:pointer;color:#c4c5ce;font-size:12px}
+details .ingredient-list{padding-bottom:4px}
+.form-panel{min-width:0}
+.data-form{display:grid;gap:16px}
+.data-form label{display:grid;gap:7px;color:#c8c9d2;font-size:12px;min-width:0}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.form-grid .wide{grid-column:1/-1}
+.data-form input:not([type=checkbox]),.data-form select,.data-form textarea{width:100%;min-width:0;border:1px solid #393b45;border-radius:10px;background:#111216;color:var(--text);padding:12px 13px;font:inherit;font-size:13px;outline:none}
+.data-form textarea{resize:vertical;line-height:1.7;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.data-form input:focus,.data-form select:focus,.data-form textarea:focus{border-color:var(--red);box-shadow:0 0 0 3px #ed3b4817}
+.data-form input[readonly]{opacity:.65}
+.checkline{display:flex!important;align-items:center;gap:10px!important;padding:12px;border:1px solid var(--border);border-radius:9px;background:#17191e}
+.checkline input{accent-color:var(--red);width:16px;height:16px}
+.notification-box{display:grid;gap:9px;padding:14px;border:1px solid var(--border);border-radius:11px}
+.notification-box h3{margin:0 0 3px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#a6a7b2}
+.form-error{color:#ff858b;font-size:12px;min-height:16px;margin:0}
+@media(max-width:900px){.record-list{grid-template-columns:1fr}}
+@media(max-width:600px){.workspace-head{align-items:flex-start;flex-direction:column}.workspace-head>.primary{width:100%}.form-grid{grid-template-columns:1fr}.form-grid .wide{grid-column:auto}.record-card{padding:14px}.record-top{flex-wrap:wrap}.record-top .pill{margin-left:auto}.button-row button{flex:1}.record-meta{gap:8px}}
