@@ -325,7 +325,7 @@ app.put('/api/manage/writeoffs/:id', async (req, res) => {
     const ref = db.collection('Cinema').doc(req.session.cinema).collection('Writeoffs').doc(safeId(req.params.id));
     const existing = await ref.get();
     if (!existing.exists) throw Object.assign(new Error('Списання не знайдено.'), { status: 404 });
-    const items = await buildWriteoffItems({ ...db, _multistaffCinema: req.session.cinema }, req.body?.items);
+    const items = await buildWriteoffItems(db, req.session.cinema, req.body?.items);
     await ref.set({ items: items.items, totalIngredients: items.totalIngredients }, { merge: true });
     await writeAudit(req, 'writeoff.update', ref.id, { itemCount: items.items.length });
     res.json({ ok: true, item: { id: ref.id, ...existing.data(), ...items } });
