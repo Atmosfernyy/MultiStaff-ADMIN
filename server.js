@@ -287,7 +287,8 @@ async function buildWriteoffItems(db, cinemaKey, inputItems) {
     const recipe = byName.get(name);
     const ingredients = {};
     for (const [key, raw] of Object.entries(recipe)) {
-      if (key === 'id' || typeof raw !== 'number' || !Number.isFinite(raw)) continue;
+      const normalizedKey = key.toLocaleLowerCase('uk-UA').replace(/ё/g, 'е');
+      if (key === 'id' || normalizedKey.includes('готовий продукт') || normalizedKey.includes('готовый продукт') || typeof raw !== 'number' || !Number.isFinite(raw)) continue;
       const amount = roundQuantity(raw * weight);
       ingredients[key] = amount;
       totals[key] = roundQuantity((totals[key] || 0) + amount);
