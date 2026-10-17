@@ -296,6 +296,17 @@ async function loadDiagnostics() {
 async function handleAction(button) {
   const action = button.dataset.action;
   const id = button.dataset.id;
+  if (action === 'developer-login') return developerGate();
+  if (action === 'developer-close') {
+    document.querySelector('#developerGate')?.remove();
+    document.body.classList.remove('developer-locked');
+    return;
+  }
+  if (action === 'developer-logout') {
+    try { await api('/api/developer/logout', { method: 'POST' }); } catch {}
+    developerUnlocked = false;
+    return openDeveloperFeatures();
+  }
   if (action === 'staff-new') return staffForm();
   if (action === 'staff-cancel') return loadStaff();
   if (action === 'staff-edit') return staffForm(staffCache.find(x => x.id === id) || {});
@@ -350,9 +361,26 @@ async function checkSession() {
 }
 document.addEventListener('click', event => {
   const button = event.target.closest('[data-action]');
-  if (button) handleAction(button);
+  if (button && button.dataset.action !== 'bot-toggle') handleAction(button);
   const nav = event.target.closest('[data-page]');
   if (nav) showPage(nav.dataset.page);
+});
+document.addEventListener('change', async event => {
+  const toggle = event.target.closest('input[data-action="bot-toggle"]');
+  if (!toggle) return;
+  const feature = toggle.dataset.feature;
+  const enabled = toggle.checked;
+  toggle.disabled = true;
+  try {
+    await api('/api/developer/features/' + encodeURIComponent(featureCinema) + '/' + encodeURIComponent(feature), {
+      method: 'PUT', body: JSON.stringify({ enabled })
+    });
+    toast('Функцію ' + (enabled ? 'увімкнено' : 'вимкнено'));
+    await loadBotFeatures(featureCinema);
+  } catch (error) {
+    toast(error.message);
+    toggle.checked = !enabled;
+  } finally { if (toggle.isConnected) toggle.disabled = false; }
 });
 document.addEventListener('DOMContentLoaded', () => {
   const content = document.querySelector('.content');
