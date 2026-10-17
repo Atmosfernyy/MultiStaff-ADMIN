@@ -233,7 +233,7 @@ app.post('/api/manage/recipes', async (req, res) => {
     if ((await ref.get()).exists) throw Object.assign(new Error('Рецепт з такою назвою вже існує.'), { status: 409 });
     await ref.set(data);
     await writeAudit(req, 'recipe.create', id, { ingredientCount: Object.keys(data).length - 1 });
-    res.status(201).json({ item: { id, ...data } });
+    res.status(201).json({ item: { ...data, id } });
   } catch (error) { publicError(res, error); }
 });
 app.put('/api/manage/recipes/:id', async (req, res) => {
@@ -244,7 +244,7 @@ app.put('/api/manage/recipes/:id', async (req, res) => {
     const data = normalizeRecipe({ id: req.body?.recipeId || id, recipeId: req.body?.recipeId || id, ingredients: req.body?.ingredients });
     await ref.set(data);
     await writeAudit(req, 'recipe.update', id, { ingredientCount: Object.keys(data).length - 1 });
-    res.json({ ok: true, item: { id, ...data } });
+    res.json({ ok: true, item: { ...data, id } });
   } catch (error) { publicError(res, error); }
 });
 app.delete('/api/manage/recipes/:id', async (req, res) => {
