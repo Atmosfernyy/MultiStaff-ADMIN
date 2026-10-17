@@ -280,11 +280,11 @@ function normalizeRecipe(body) {
 
 // Writeoffs: preserve existing schema: createdAt, items[{name, weight, ingredients}], totalIngredients.
 function roundQuantity(value) { return Math.round((value + Number.EPSILON) * 1000000) / 1000000; }
-async function buildWriteoffItems(db, inputItems) {
+async function buildWriteoffItems(db, cinemaKey, inputItems) {
   if (!Array.isArray(inputItems) || !inputItems.length || inputItems.length > 100) {
     throw Object.assign(new Error('Додайте щонайменше один продукт для списання.'), { status: 400 });
   }
-  const recipes = await db.collection('Cinema').doc('' + db._multistaffCinema).collection('Recipes').get();
+  const recipes = await db.collection('Cinema').doc(cinemaKey).collection('Recipes').get();
   const byName = new Map(recipes.docs.map(doc => [doc.id, doc.data()]));
   const items = [];
   const totals = {};
@@ -319,7 +319,7 @@ app.get('/api/manage/writeoffs', async (req, res) => {
 app.post('/api/manage/writeoffs', async (req, res) => {
   try {
     const db = dbForSession(req);
-    const items = await buildWriteoffItems({ ...db, _multistaffCinema: req.session.cinema }, req.body?.items);
+    const items = await buildWriteoffItems(db, req.session.cinema, req.body?.items);
     const ref = db.collection('Cinema').doc(req.session.cinema).collection('Writeoffs').doc();
     const data = { createdAt: admin.firestore.FieldValue.serverTimestamp(), ...items };
     await ref.set(data);
