@@ -146,13 +146,14 @@ app.get('/api/auth/me', (req, res) => {
 app.post('/api/auth/logout', (req, res) => { if (req.session) req.session = null; res.json({ ok: true }); });
 
 const DEVELOPER_FEATURES = {
-  airAlerts: 'Повітряні тривоги',
-  checklists: 'Чек-листи',
-  lightReminders: 'Нагадування про світло',
-  temperature: 'Температура',
-  writeoffs: 'Списання',
-  recipes: 'Рецепти'
-};
+  admin_panel: 'Адмін-панель',
+  light_reminders: 'Нагадування про світло',
+  orders: 'Замовлення',
+  sessions: 'Сеанси',
+  statistics: 'Статистика',
+  work_schedule: 'Графік роботи',
+  writeoffs: 'Списання'
+}
 function requireDeveloper(req, res, next) {
   if (req.session?.developerAuthenticated !== true) return res.status(401).json({ error: 'Потрібна окрема Developer-авторизація.' });
   next();
