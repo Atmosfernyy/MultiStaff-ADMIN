@@ -165,13 +165,13 @@ app.post('/api/manage/staff', async (req, res) => {
     const ref = dbForSession(req).collection('Cinema').doc(req.session.cinema).collection('Users').doc(id);
     if ((await ref.get()).exists) throw Object.assign(new Error('Працівник з таким ID вже існує.'), { status: 409 });
     const data = {
-      name, userRole, password, telegramId: cleanText(req.body?.telegramId, 64) || null,
+      name, userRole, password,
+      telegramId: req.body?.telegramId === '' || req.body?.telegramId == null ? null : String(req.body.telegramId).trim(),
       isBlocked: Boolean(req.body?.isBlocked),
-      notifications: {
-        alarms: req.body?.notifications?.alarms !== false,
-        checklists: req.body?.notifications?.checklists !== false,
-        lights: req.body?.notifications?.lights !== false
-      }
+      airAlertNotifications: req.body?.airAlertNotifications !== false,
+      checklistNotifications: req.body?.checklistNotifications !== false,
+      lightReminders: req.body?.lightReminders === true,
+      userColor: cleanText(req.body?.userColor, 40) || 'dark_red'
     };
     await ref.set(data);
     await writeAudit(req, 'staff.create', id, { name, userRole });
@@ -188,15 +188,15 @@ app.put('/api/manage/staff/:id', async (req, res) => {
     const patch = {};
     if (body.name !== undefined) patch.name = cleanText(body.name);
     if (body.userRole !== undefined) patch.userRole = cleanText(body.userRole, 60).toLowerCase();
-    if (body.telegramId !== undefined) patch.telegramId = cleanText(body.telegramId, 64) || null;
+    if (body.telegramId !== undefined) patch.telegramId = body.telegramId === '' || body.telegramId == null ? null : String(body.telegramId).trim();
     if (body.isBlocked !== undefined) patch.isBlocked = Boolean(body.isBlocked);
+    if (body.airAlertNotifications !== undefined) patch.airAlertNotifications = Boolean(body.airAlertNotifications);
+    if (body.checklistNotifications !== undefined) patch.checklistNotifications = Boolean(body.checklistNotifications);
+    if (body.lightReminders !== undefined) patch.lightReminders = Boolean(body.lightReminders);
+    if (body.userColor !== undefined) patch.userColor = cleanText(body.userColor, 40);
     if (body.password !== undefined && String(body.password) !== '') {
       if (String(body.password).length > 256) throw Object.assign(new Error('Пароль задовгий.'), { status: 400 });
       patch.password = String(body.password);
-    }
-    if (body.notifications && typeof body.notifications === 'object') {
-      const current = old.data().notifications || {};
-      patch.notifications = { ...current, ...body.notifications };
     }
     if (!Object.keys(patch).length) throw Object.assign(new Error('Немає змін для збереження.'), { status: 400 });
     await ref.set(patch, { merge: true });
