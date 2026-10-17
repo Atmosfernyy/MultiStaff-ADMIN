@@ -43,6 +43,7 @@ const loginRateLimit = rateLimit({
   handler: (_req, res) => res.status(429).json({ error: 'Забагато спроб входу. Зачекайте до 15 хвилин перед наступною спробою.' })
 });
 app.use('/api/auth/login', loginRateLimit);
+app.use('/api/developer/login', loginRateLimit);
 app.use('/api', apiRateLimit);
 
 if (sessionSecret) {
