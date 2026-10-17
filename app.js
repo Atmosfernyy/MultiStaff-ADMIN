@@ -296,6 +296,22 @@ async function loadDiagnostics() {
 async function handleAction(button) {
   const action = button.dataset.action;
   const id = button.dataset.id;
+  if (action === 'account-logout') {
+    const button = document.querySelector('[data-action="account-logout"]');
+    if (button) { button.disabled = true; button.textContent = 'Вихід…'; }
+    try {
+      await fetch('/api/developer/logout', { method: 'POST', headers: { Accept: 'application/json' }, cache: 'no-store' });
+      await fetch('/api/auth/logout', { method: 'POST', headers: { Accept: 'application/json' }, cache: 'no-store' });
+    } catch {}
+    developerUnlocked = false;
+    currentUser = null;
+    document.querySelector('#developerGate')?.remove();
+    document.body.classList.remove('developer-locked');
+    document.querySelector('#loginForm')?.reset();
+    showLogin('Ви вийшли з акаунта. Увійдіть знову, щоб продовжити.');
+    if (button) { button.disabled = false; button.innerHTML = '<span>↪</span> Вийти з акаунта'; }
+    return;
+  }
   if (action === 'developer-login') return developerGate();
   if (action === 'developer-close') {
     document.querySelector('#developerGate')?.remove();
