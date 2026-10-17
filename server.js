@@ -144,6 +144,81 @@ app.get('/api/auth/me', (req, res) => {
 });
 app.post('/api/auth/logout', (req, res) => { if (req.session) req.session = null; res.json({ ok: true }); });
 
+const DEVELOPER_FEATURES = {
+  airAlerts: 'Повітряні тривоги',
+  checklists: 'Чек-листи',
+  lightReminders: 'Нагадування про світло',
+  temperature: 'Температура',
+  writeoffs: 'Списання',
+  recipes: 'Рецепти'
+};
+function requireDeveloper(req, res, next) {
+  if (req.session?.developerAuthenticated !== true) return res.status(401).json({ error: 'Потрібна окрема Developer-авторизація.' });
+  next();
+}
+app.post('/api/developer/login', (req, res) => {
+  const login = process.env.DEVELOPER_LOGIN;
+  const password = process.env.DEVELOPER_PASSWORD;
+  if (!login || !password) return res.status(503).json({ error: 'Налаштуйте DEVELOPER_LOGIN та DEVELOPER_PASSWORD у змінних середовища сервера.' });
+  const suppliedLogin = String(req.body?.login || '');
+  const suppliedPassword = String(req.body?.password || '');
+  if (suppliedLogin !== login || suppliedPassword !== password) return res.status(401).json({ error: 'Неправильний Developer-логін або пароль.' });
+  req.session = { ...(req.session || {}), developerAuthenticated: true, developerName: login };
+  res.json({ ok: true, developer: login });
+});
+app.get('/api/developer/me', (req, res) => {
+  if (req.session?.developerAuthenticated !== true) return res.status(401).json({ authenticated: false });
+  res.set('Cache-Control', 'no-store');
+  res.json({ authenticated: true, developer: req.session.developerName || 'Developer' });
+});
+app.post('/api/developer/logout', (req, res) => {
+  if (req.session) {
+    const nextSession = { ...req.session };
+    delete nextSession.developerAuthenticated;
+    delete nextSession.developerName;
+    req.session = Object.keys(nextSession).length ? nextSession : null;
+  }
+  res.json({ ok: true });
+});
+app.get('/api/developer/features/:cinema', requireDeveloper, async (req, res) => {
+  try {
+    const cinema = PROJECTS.find(project => project.key === req.params.cinema);
+    if (!cinema) throw Object.assign(new Error('Невідомий кінотеатр.'), { status: 400 });
+    const db = getFirestore(cinema.key);
+    const ref = db.collection('Cinema').doc(cinema.key).collection('BotConfig').doc('features');
+    const snap = await ref.get();
+    const stored = snap.exists ? (snap.data() || {}) : {};
+    const features = {};
+    for (const [key, label] of Object.entries(DEVELOPER_FEATURES)) {
+      features[key] = { label, enabled: typeof stored[key] === 'boolean' ? stored[key] : true };
+    }
+    for (const [key, value] of Object.entries(stored)) {
+      if (typeof value === 'boolean' && !(key in features) && /^[a-zA-Z][a-zA-Z0-9_]{0,49}$/.test(key)) {
+        features[key] = { label: key, enabled: value, custom: true };
+      }
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json({ cinema: cinema.key, features, configured: snap.exists });
+  } catch (error) { publicError(res, error); }
+});
+app.put('/api/developer/features/:cinema/:feature', requireDeveloper, async (req, res) => {
+  try {
+    const cinema = PROJECTS.find(project => project.key === req.params.cinema);
+    if (!cinema) throw Object.assign(new Error('Невідомий кінотеатр.'), { status: 400 });
+    const feature = safeId(req.params.feature);
+    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,49}$/.test(feature)) throw Object.assign(new Error('Некоректна назва функції.'), { status: 400 });
+    if (typeof req.body?.enabled !== 'boolean') throw Object.assign(new Error('Потрібно вказати стан функції.'), { status: 400 });
+    const db = getFirestore(cinema.key);
+    const ref = db.collection('Cinema').doc(cinema.key).collection('BotConfig').doc('features');
+    await ref.set({
+      [feature]: req.body.enabled,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: req.session.developerName || 'Developer'
+    }, { merge: true });
+    res.json({ ok: true, cinema: cinema.key, feature, enabled: req.body.enabled });
+  } catch (error) { publicError(res, error); }
+});
+
 app.use('/api/manage', requireSession);
 
 // Staff: Cinema/{cinema}/Users/{userId}
