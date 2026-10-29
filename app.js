@@ -264,7 +264,7 @@ async function loadWriteoffs() {
     const groups = new Map();
     [...writeoffsCache].sort((a, b) => (getWriteoffDate(b)?.getTime() || 0) - (getWriteoffDate(a)?.getTime() || 0)).forEach(item => {
       const date = getWriteoffDate(item);
-      const key = date ? date.toLocaleDateString('en-CA') : 'unknown';
+      const key = date ? [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-') : 'unknown';
       if (!groups.has(key)) groups.set(key, { date, items: [] });
       groups.get(key).items.push(item);
     });
