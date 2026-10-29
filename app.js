@@ -253,8 +253,28 @@ function recipeForm(recipe = {}) {
 async function loadWriteoffs() {
   try {
     writeoffsCache = (await api('/api/manage/writeoffs')).items || [];
+    const getWriteoffDate = item => {
+      const value = item.createdAt;
+      let date;
+      if (value && value._seconds) date = new Date(value._seconds * 1000);
+      else if (value && value.seconds) date = new Date(value.seconds * 1000);
+      else date = new Date(value || 0);
+      return Number.isNaN(date.getTime()) ? null : date;
+    };
+    const groups = new Map();
+    [...writeoffsCache].sort((a, b) => (getWriteoffDate(b)?.getTime() || 0) - (getWriteoffDate(a)?.getTime() || 0)).forEach(item => {
+      const date = getWriteoffDate(item);
+      const key = date ? date.toLocaleDateString('en-CA') : 'unknown';
+      if (!groups.has(key)) groups.set(key, { date, items: [] });
+      groups.get(key).items.push(item);
+    });
+    const renderWriteoff = item => '<article class="record-card"><div class="record-top"><div class="record-title"><b>Списання #' + escapeHtml(item.id.slice(0, 8)) + '</b><small>' + escapeHtml(formatDate(item.createdAt)) + '</small></div><span class="pill">' + ((item.items || []).length) + ' продуктів</span></div><div class="writeoff-items">' + (item.items || []).map(product => '<div><span>' + escapeHtml(product.name) + ' × ' + escapeHtml(numberText(product.weight)) + '</span><small>' + Object.keys(product.ingredients || {}).length + ' компонентів</small></div>').join('') + '</div><details><summary>Загальний розрахунок інгредієнтів</summary>' + moneyMap(item.totalIngredients) + '</details><div class="button-row"><button data-action="writeoff-edit" data-id="' + escapeHtml(item.id) + '">✎ Редагувати</button><button class="danger-button" data-action="writeoff-delete" data-id="' + escapeHtml(item.id) + '">Видалити</button></div></article>';
+    const groupedHtml = [...groups.entries()].map(([key, group], index) => {
+      const label = group.date ? group.date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Дата невідома';
+      return '<details class="writeoff-date-group"' + (index === 0 ? ' open' : '') + '><summary><span>' + escapeHtml(label) + '</span><small>' + group.items.length + ' списань</small></summary><div class="record-list">' + group.items.map(renderWriteoff).join('') + '</div></details>';
+    }).join('');
     document.querySelector('#dataContent').innerHTML = panelHeader('Списання', 'Cinema/' + currentUser.cinema + '/Writeoffs · ' + writeoffsCache.length + ' записів', '＋ Нове списання', 'writeoff-new') +
-      (writeoffsCache.length ? '<div class="record-list">' + writeoffsCache.map(item => '<article class="record-card"><div class="record-top"><div class="record-title"><b>Списання #' + escapeHtml(item.id.slice(0, 8)) + '</b><small>' + escapeHtml(formatDate(item.createdAt)) + '</small></div><span class="pill">' + ((item.items || []).length) + ' продуктів</span></div><div class="writeoff-items">' + (item.items || []).map(product => '<div><span>' + escapeHtml(product.name) + ' × ' + escapeHtml(numberText(product.weight)) + '</span><small>' + Object.keys(product.ingredients || {}).length + ' компонентів</small></div>').join('') + '</div><details><summary>Загальний розрахунок інгредієнтів</summary>' + moneyMap(item.totalIngredients) + '</details><div class="button-row"><button data-action="writeoff-edit" data-id="' + escapeHtml(item.id) + '">✎ Редагувати</button><button class="danger-button" data-action="writeoff-delete" data-id="' + escapeHtml(item.id) + '">Видалити</button></div></article>').join('') + '</div>' : emptyState('Списань поки немає.'));
+      (writeoffsCache.length ? '<div class="writeoff-date-list">' + groupedHtml + '</div>' : emptyState('Списань поки немає.'));
   } catch (error) { document.querySelector('#dataContent').innerHTML = '<p class="form-error">' + escapeHtml(error.message) + '</p>'; }
 }
 function writeoffForm(item = {}) {
