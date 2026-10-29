@@ -152,6 +152,7 @@ const DEVELOPER_FEATURES = {
   sessions: 'Сеанси',
   statistics: 'Статистика',
   work_schedule: 'Графік роботи',
+  checklists: 'Чек-листи',
   writeoffs: 'Списання'
 }
 function requireDeveloper(req, res, next) {
