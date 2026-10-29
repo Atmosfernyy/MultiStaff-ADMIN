@@ -175,12 +175,35 @@ async function loadStaff() {
   } catch (error) { workspace().innerHTML = '<section class="panel">' + escapeHtml(error.message) + '</section>'; }
 }
 function renderStaff() {
-  workspace().innerHTML = panelHeader('Працівники', 'Кінотеатр: ' + currentUser.cinemaLabel + ' · ' + staffCache.length + ' записів', '＋ Додати працівника', 'staff-new') +
-    (staffCache.length ? '<div class="record-list">' + staffCache.map(person => {
+  const searchMarkup = '<section class="panel staff-search-panel"><label for="staffSearch">Пошук працівника</label><input id="staffSearch" type="search" autocomplete="off" placeholder="Ім’я, прізвище, робочий ID, Telegram ID або роль"><p class="muted small">Пошук працює за всіма цими полями одночасно.</p></section><div id="staffResults"></div>';
+  workspace().innerHTML = panelHeader('Працівники', 'Кінотеатр: ' + currentUser.cinemaLabel + ' · ' + staffCache.length + ' записів', '＋ Додати працівника', 'staff-new') + searchMarkup;
+  const searchInput = document.querySelector('#staffSearch');
+  const results = document.querySelector('#staffResults');
+  const renderResults = () => {
+    const query = searchInput.value.trim().toLocaleLowerCase('uk-UA');
+    const filtered = staffCache.filter(person => {
+      const searchable = [
+        person.name, person.id, person.telegramId, person.userRole,
+        person.role, person.login, person.email, person.phone
+      ].filter(value => value !== undefined && value !== null).join(' ').toLocaleLowerCase('uk-UA');
+      return !query || searchable.includes(query);
+    });
+    if (!staffCache.length) {
+      results.innerHTML = emptyState('У цьому кінотеатрі поки немає працівників.');
+      return;
+    }
+    if (!filtered.length) {
+      results.innerHTML = emptyState('Нікого не знайдено. Перевірте ім’я, роль або ID.');
+      return;
+    }
+    results.innerHTML = '<p class="muted small staff-result-count">Знайдено: ' + filtered.length + ' з ' + staffCache.length + '</p><div class="record-list">' + filtered.map(person => {
       const blocked = person.isBlocked === true;
       const notifs = { alarms: person.airAlertNotifications, checklists: person.checklistNotifications, lights: person.lightReminders };
       return '<article class="record-card"><div class="record-top"><div class="avatar">' + escapeHtml((person.name || person.id).slice(0,1).toUpperCase()) + '</div><div class="record-title"><b>' + escapeHtml(person.name || person.id) + '</b><small>' + escapeHtml(person.userRole || 'Без ролі') + ' · ID ' + escapeHtml(person.id) + '</small></div><span class="pill ' + (blocked ? 'danger' : 'success') + '">' + (blocked ? 'Заблокований' : 'Активний') + '</span></div><div class="record-meta"><div><small>Telegram ID</small><b>' + escapeHtml(person.telegramId || '—') + '</b></div><div><small>Доступ</small><b>' + (blocked ? 'Заблоковано' : 'Дозволено') + '</b></div></div><div class="muted small">Сповіщення: тривоги ' + (notifs.alarms === false ? 'ні' : 'так') + ' · чек-листи ' + (notifs.checklists === false ? 'ні' : 'так') + ' · світло ' + (notifs.lights === false ? 'ні' : 'так') + '</div><div class="button-row"><button data-action="staff-edit" data-id="' + escapeHtml(person.id) + '">✎ Редагувати</button><button data-action="staff-block" data-id="' + escapeHtml(person.id) + '">' + (blocked ? 'Розблокувати' : 'Заблокувати') + '</button><button class="danger-button" data-action="staff-delete" data-id="' + escapeHtml(person.id) + '">Видалити</button></div></article>';
-    }).join('') + '</div>' : emptyState('У цьому кінотеатрі поки немає працівників.'));
+    }).join('') + '</div>';
+  };
+  searchInput.addEventListener('input', renderResults);
+  renderResults();
 }
 function staffForm(person = {}) {
   editingStaffId = person.id || null;
