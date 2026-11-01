@@ -271,6 +271,8 @@ app.put('/api/manage/staff/:id', async (req, res) => {
     if (body.airAlertNotifications !== undefined) patch.airAlertNotifications = Boolean(body.airAlertNotifications);
     if (body.checklistNotifications !== undefined) patch.checklistNotifications = Boolean(body.checklistNotifications);
     if (body.lightReminders !== undefined) patch.lightReminders = Boolean(body.lightReminders);
+    if (body.lightOffNotifications !== undefined) patch.lightOffNotifications = Boolean(body.lightOffNotifications);
+    if (body.lightOnNotifications !== undefined) patch.lightOnNotifications = Boolean(body.lightOnNotifications);
     if (body.userColor !== undefined) patch.userColor = cleanText(body.userColor, 40);
     if (body.password !== undefined && String(body.password) !== '') {
       if (String(body.password).length > 256) throw Object.assign(new Error('Пароль задовгий.'), { status: 400 });
