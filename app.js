@@ -215,6 +215,22 @@ function developerGate() {
       try {
         await api('/api/developer/login', { method: 'POST', body: JSON.stringify({ login: form.elements.login.value, password: form.elements.password.value }) });
         developerUnlocked = true;
+        const state = await api('/api/developer/me');
+        const cinema = document.querySelector('#cinema');
+        if (cinema) {
+          cinema.innerHTML = '';
+          for (const project of (state.projects || [])) {
+            const option = document.createElement('option');
+            option.value = project.key;
+            option.textContent = project.label + (project.configured ? '' : ' · не налаштовано');
+            option.disabled = !project.configured;
+            cinema.append(option);
+          }
+          const active = (state.projects || []).find(project => project.key === state.activeCinema && project.configured) || (state.projects || []).find(project => project.configured);
+          if (active) { cinema.value = active.key; currentUser.cinema = active.key; currentUser.cinemaLabel = active.label; }
+          cinema.disabled = false;
+        }
+        updateAccountBadge();
         form.reset();
         overlay.remove();
         document.body.classList.remove('developer-locked');
