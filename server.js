@@ -470,8 +470,8 @@ app.use(express.static(ROOT, {
 app.get('*', (_req, res) => res.sendFile(path.join(ROOT, 'index.html')));
 
 
-// Google Sheets sync: listen to Firestore directly so website and bot writeoffs are both covered.
-// Initial test rollout is intentionally limited to Atmosfera.
+// Google Sheets sync: listen directly to Firestore so website and bot writeoffs are covered.
+// Atmosfera and Karavan write to separate tabs in the same spreadsheet.
 function writeoffDateKey(data) {
   const value = data?.createdAt;
   let date = null;
@@ -488,7 +488,7 @@ function writeoffDateKey(data) {
   return part('year') + '-' + part('month') + '-' + part('day');
 }
 
-async function postWriteoffTotalsToSheets(date, ingredients) {
+async function postWriteoffTotalsToSheets(cinema, date, ingredients) {
   const url = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
   const token = process.env.GOOGLE_SHEETS_SYNC_TOKEN;
   if (!url || !token) throw new Error('Google Sheets sync environment variables are missing.');
@@ -496,7 +496,7 @@ async function postWriteoffTotalsToSheets(date, ingredients) {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token, date, ingredients }),
+    body: JSON.stringify({ token, cinema, date, ingredients }),
     signal: AbortSignal.timeout(20000)
   });
   const bodyText = await response.text();
@@ -506,7 +506,8 @@ async function postWriteoffTotalsToSheets(date, ingredients) {
   if (!response.ok || result.ok !== true) {
     throw new Error('Google Sheets sync failed: ' + (result.error || ('HTTP ' + response.status)));
   }
-  console.log('[Sheets sync] Atmosfera ' + date + ': updated ' + result.updated + ' ingredient rows.');
+  console.log('[Sheets sync] ' + cinema + ' (' + result.sheet + ') ' + date +
+    ': updated ' + result.updated + ' ingredient rows.');
 }
 
 function startWriteoffSheetsSync() {
@@ -515,46 +516,49 @@ function startWriteoffSheetsSync() {
     return;
   }
 
-  try {
-    const writeoffsRef = getFirestore('atmosfera')
-      .collection('Cinema').doc('atmosfera').collection('Writeoffs');
-    let syncQueue = Promise.resolve();
+  for (const cinema of ['atmosfera', 'karavan']) {
+    try {
+      const writeoffsRef = getFirestore(cinema)
+        .collection('Cinema').doc(cinema).collection('Writeoffs');
+      let syncQueue = Promise.resolve();
 
-    writeoffsRef.onSnapshot(snapshot => {
-      const affectedDates = new Set();
-      for (const change of snapshot.docChanges()) {
-        const date = writeoffDateKey(change.doc.data());
-        if (date) affectedDates.add(date);
-      }
-      if (!affectedDates.size) return;
-
-      // Queue snapshots to prevent an older update from overwriting a newer total.
-      syncQueue = syncQueue.then(async () => {
-        for (const date of affectedDates) {
-          const totals = {};
-          for (const doc of snapshot.docs) {
-            const data = doc.data() || {};
-            if (writeoffDateKey(data) !== date) continue;
-            const ingredients = data.totalIngredients;
-            if (!ingredients || typeof ingredients !== 'object' || Array.isArray(ingredients)) continue;
-            for (const [name, rawAmount] of Object.entries(ingredients)) {
-              const amount = Number(rawAmount);
-              if (!Number.isFinite(amount)) continue;
-              totals[name] = (totals[name] || 0) + amount;
-            }
-          }
-          await postWriteoffTotalsToSheets(date, totals);
+      writeoffsRef.onSnapshot(snapshot => {
+        const affectedDates = new Set();
+        for (const change of snapshot.docChanges()) {
+          // For removed docs Firestore still supplies the document's last data.
+          const date = writeoffDateKey(change.doc.data());
+          if (date) affectedDates.add(date);
         }
-      }).catch(error => {
-        console.error('[Sheets sync] Atmosfera listener processing failed:', error.message);
-      });
-    }, error => {
-      console.error('[Sheets sync] Firestore listener failed:', error.message);
-    });
+        if (!affectedDates.size) return;
 
-    console.log('[Sheets sync] Firestore listener started for Atmosfera.');
-  } catch (error) {
-    console.error('[Sheets sync] Could not start Firestore listener:', error.message);
+        // Serialize snapshots per cinema so stale totals cannot overtake newer ones.
+        syncQueue = syncQueue.then(async () => {
+          for (const date of affectedDates) {
+            const totals = {};
+            for (const doc of snapshot.docs) {
+              const data = doc.data() || {};
+              if (writeoffDateKey(data) !== date) continue;
+              const ingredients = data.totalIngredients;
+              if (!ingredients || typeof ingredients !== 'object' || Array.isArray(ingredients)) continue;
+              for (const [name, rawAmount] of Object.entries(ingredients)) {
+                const amount = Number(rawAmount);
+                if (!Number.isFinite(amount)) continue;
+                totals[name] = (totals[name] || 0) + amount;
+              }
+            }
+            await postWriteoffTotalsToSheets(cinema, date, totals);
+          }
+        }).catch(error => {
+          console.error('[Sheets sync] ' + cinema + ' listener processing failed:', error.message);
+        });
+      }, error => {
+        console.error('[Sheets sync] ' + cinema + ' Firestore listener failed:', error.message);
+      });
+
+      console.log('[Sheets sync] Firestore listener started for ' + cinema + '.');
+    } catch (error) {
+      console.error('[Sheets sync] Could not start Firestore listener for ' + cinema + ':', error.message);
+    }
   }
 }
 
