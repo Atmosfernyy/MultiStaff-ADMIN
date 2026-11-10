@@ -72,12 +72,22 @@ function getFirestore(projectKey) {
   serviceApps.set(project.key, firebaseApp);
   return firebaseApp.firestore();
 }
+function sessionCinema(req) {
+  return req.session?.developerAuthenticated === true
+    ? (req.session.activeCinema || req.session.cinema)
+    : req.session?.cinema;
+}
 function requireSession(req, res, next) {
+  if (req.session?.developerAuthenticated === true) {
+    const cinema = sessionCinema(req);
+    if (!PROJECTS.some(project => project.key === cinema)) return res.status(403).json({ error: 'Developer-сесія не має вибраного кінотеатру.' });
+    return next();
+  }
   if (!req.session?.userId || !req.session?.cinema) return res.status(401).json({ error: 'Потрібно увійти до системи.' });
   if (!allowedRoles.has(String(req.session.role || '').toLowerCase())) return res.status(403).json({ error: 'Недостатньо прав для цієї операції.' });
   next();
 }
-function dbForSession(req) { return getFirestore(req.session.cinema); }
+function dbForSession(req) { return getFirestore(sessionCinema(req)); }
 function cleanText(value, max = 180) { return String(value ?? '').trim().slice(0, max); }
 function safeId(value) {
   const id = cleanText(value, 128);
@@ -172,7 +182,21 @@ app.post('/api/developer/login', (req, res) => {
 app.get('/api/developer/me', (req, res) => {
   if (req.session?.developerAuthenticated !== true) return res.status(401).json({ authenticated: false });
   res.set('Cache-Control', 'no-store');
-  res.json({ authenticated: true, developer: req.session.developerName || 'Developer' });
+  const activeCinema = sessionCinema(req);
+  res.json({
+    authenticated: true,
+    developer: req.session.developerName || 'Developer',
+    activeCinema,
+    projects: PROJECTS.map(project => ({ key: project.key, label: project.label, configured: Boolean(process.env[project.env]) }))
+  });
+});
+app.post('/api/developer/switch-cinema', requireDeveloper, (req, res) => {
+  const cinema = PROJECTS.find(project => project.key === String(req.body?.cinema || ''));
+  if (!cinema) return res.status(400).json({ error: 'Невідомий кінотеатр.' });
+  if (!process.env[cinema.env]) return res.status(503).json({ error: 'Firebase для цього кінотеатру не налаштовано.' });
+  req.session = { ...(req.session || {}), activeCinema: cinema.key, activeCinemaLabel: cinema.label };
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true, cinema: cinema.key, cinemaLabel: cinema.label });
 });
 app.post('/api/developer/logout', (req, res) => {
   if (req.session) {
@@ -227,7 +251,7 @@ app.use('/api/manage', requireSession);
 // Staff: Cinema/{cinema}/Users/{userId}
 app.get('/api/manage/staff', async (req, res) => {
   try {
-    const snap = await dbForSession(req).collection('Cinema').doc(req.session.cinema).collection('Users').get();
+    const snap = await dbForSession(req).collection('Cinema').doc(sessionCinema(req)).collection('Users').get();
     res.set('Cache-Control', 'no-store');
     res.json({ items: snap.docs.map(toPlainDoc).sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id), 'uk')) });
   } catch (error) { publicError(res, error); }
@@ -240,7 +264,7 @@ app.post('/api/manage/staff', async (req, res) => {
     const password = String(req.body?.password ?? '');
     if (!name || !userRole) throw Object.assign(new Error('Вкажіть ім’я та роль працівника.'), { status: 400 });
     if (!password || password.length > 256) throw Object.assign(new Error('Для нового працівника потрібен пароль.'), { status: 400 });
-    const ref = dbForSession(req).collection('Cinema').doc(req.session.cinema).collection('Users').doc(id);
+    const ref = dbForSession(req).collection('Cinema').doc(sessionCinema(req)).collection('Users').doc(id);
     if ((await ref.get()).exists) throw Object.assign(new Error('Працівник з таким ID вже існує.'), { status: 409 });
     const data = {
       name, userRole, password,
@@ -259,7 +283,7 @@ app.post('/api/manage/staff', async (req, res) => {
 app.put('/api/manage/staff/:id', async (req, res) => {
   try {
     const id = safeId(req.params.id);
-    const ref = dbForSession(req).collection('Cinema').doc(req.session.cinema).collection('Users').doc(id);
+    const ref = dbForSession(req).collection('Cinema').doc(sessionCinema(req)).collection('Users').doc(id);
     const old = await ref.get();
     if (!old.exists) throw Object.assign(new Error('Працівника не знайдено.'), { status: 404 });
     const body = req.body || {};
@@ -287,8 +311,8 @@ app.put('/api/manage/staff/:id', async (req, res) => {
 app.delete('/api/manage/staff/:id', async (req, res) => {
   try {
     const id = safeId(req.params.id);
-    if (id === req.session.userId) throw Object.assign(new Error('Не можна видалити власний обліковий запис.'), { status: 400 });
-    const ref = dbForSession(req).collection('Cinema').doc(req.session.cinema).collection('Users').doc(id);
+    if (req.session?.developerAuthenticated !== true && id === req.session.userId) throw Object.assign(new Error('Не можна видалити власний обліковий запис.'), { status: 400 });
+    const ref = dbForSession(req).collection('Cinema').doc(sessionCinema(req)).collection('Users').doc(id);
     const doc = await ref.get();
     if (!doc.exists) throw Object.assign(new Error('Працівника не знайдено.'), { status: 404 });
     await ref.delete();
@@ -300,7 +324,7 @@ app.delete('/api/manage/staff/:id', async (req, res) => {
 // Recipes: Cinema/{cinema}/Recipes/{recipeDocumentId}. Numeric fields are recipe ingredients.
 app.get('/api/manage/recipes', async (req, res) => {
   try {
-    const snap = await dbForSession(req).collection('Cinema').doc(req.session.cinema).collection('Recipes').get();
+    const snap = await dbForSession(req).collection('Cinema').doc(sessionCinema(req)).collection('Recipes').get();
     res.set('Cache-Control', 'no-store');
     res.json({ items: snap.docs.map(doc => ({ ...doc.data(), documentId: doc.id, recipeId: doc.data().id || doc.id, id: doc.id })).sort((a, b) => a.id.localeCompare(b.id, 'uk')) });
   } catch (error) { publicError(res, error); }
@@ -309,7 +333,7 @@ app.post('/api/manage/recipes', async (req, res) => {
   try {
     const id = safeId(req.body?.id);
     const data = normalizeRecipe(req.body);
-    const ref = dbForSession(req).collection('Cinema').doc(req.session.cinema).collection('Recipes').doc(id);
+    const ref = dbForSession(req).collection('Cinema').doc(sessionCinema(req)).collection('Recipes').doc(id);
     if ((await ref.get()).exists) throw Object.assign(new Error('Рецепт з такою назвою вже існує.'), { status: 409 });
     await ref.set(data);
     await writeAudit(req, 'recipe.create', id, { ingredientCount: Object.keys(data).length - 1 });
@@ -319,7 +343,7 @@ app.post('/api/manage/recipes', async (req, res) => {
 app.put('/api/manage/recipes/:id', async (req, res) => {
   try {
     const id = safeId(req.params.id);
-    const ref = dbForSession(req).collection('Cinema').doc(req.session.cinema).collection('Recipes').doc(id);
+    const ref = dbForSession(req).collection('Cinema').doc(sessionCinema(req)).collection('Recipes').doc(id);
     if (!(await ref.get()).exists) throw Object.assign(new Error('Рецепт не знайдено.'), { status: 404 });
     const data = normalizeRecipe({ id: req.body?.recipeId || id, recipeId: req.body?.recipeId || id, ingredients: req.body?.ingredients });
     await ref.set(data);
@@ -331,7 +355,7 @@ app.delete('/api/manage/recipes/:id', async (req, res) => {
   try {
     const id = safeId(req.params.id);
     const db = dbForSession(req);
-    const ref = db.collection('Cinema').doc(req.session.cinema).collection('Recipes').doc(id);
+    const ref = db.collection('Cinema').doc(sessionCinema(req)).collection('Recipes').doc(id);
     if (!(await ref.get()).exists) throw Object.assign(new Error('Рецепт не знайдено.'), { status: 404 });
     await ref.delete();
     await writeAudit(req, 'recipe.delete', id, {});
@@ -379,7 +403,7 @@ async function buildWriteoffItems(db, cinemaKey, inputItems) {
 }
 app.get('/api/manage/writeoffs', async (req, res) => {
   try {
-    const snap = await dbForSession(req).collection('Cinema').doc(req.session.cinema).collection('Writeoffs').get();
+    const snap = await dbForSession(req).collection('Cinema').doc(sessionCinema(req)).collection('Writeoffs').get();
     const items = snap.docs.map(toPlainDoc).sort((a, b) => {
       const at = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
       const bt = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
@@ -392,8 +416,8 @@ app.get('/api/manage/writeoffs', async (req, res) => {
 app.post('/api/manage/writeoffs', async (req, res) => {
   try {
     const db = dbForSession(req);
-    const items = await buildWriteoffItems(db, req.session.cinema, req.body?.items);
-    const ref = db.collection('Cinema').doc(req.session.cinema).collection('Writeoffs').doc();
+    const items = await buildWriteoffItems(db, sessionCinema(req), req.body?.items);
+    const ref = db.collection('Cinema').doc(sessionCinema(req)).collection('Writeoffs').doc();
     const data = { createdAt: admin.firestore.FieldValue.serverTimestamp(), ...items };
     await ref.set(data);
     await writeAudit(req, 'writeoff.create', ref.id, { itemCount: items.items.length });
@@ -403,10 +427,10 @@ app.post('/api/manage/writeoffs', async (req, res) => {
 app.put('/api/manage/writeoffs/:id', async (req, res) => {
   try {
     const db = dbForSession(req);
-    const ref = db.collection('Cinema').doc(req.session.cinema).collection('Writeoffs').doc(safeId(req.params.id));
+    const ref = db.collection('Cinema').doc(sessionCinema(req)).collection('Writeoffs').doc(safeId(req.params.id));
     const existing = await ref.get();
     if (!existing.exists) throw Object.assign(new Error('Списання не знайдено.'), { status: 404 });
-    const items = await buildWriteoffItems(db, req.session.cinema, req.body?.items);
+    const items = await buildWriteoffItems(db, sessionCinema(req), req.body?.items);
     await ref.set({ items: items.items, totalIngredients: items.totalIngredients }, { merge: true });
     await writeAudit(req, 'writeoff.update', ref.id, { itemCount: items.items.length });
     res.json({ ok: true, item: { id: ref.id, ...existing.data(), ...items } });
@@ -415,7 +439,7 @@ app.put('/api/manage/writeoffs/:id', async (req, res) => {
 app.delete('/api/manage/writeoffs/:id', async (req, res) => {
   try {
     const db = dbForSession(req);
-    const ref = db.collection('Cinema').doc(req.session.cinema).collection('Writeoffs').doc(safeId(req.params.id));
+    const ref = db.collection('Cinema').doc(sessionCinema(req)).collection('Writeoffs').doc(safeId(req.params.id));
     if (!(await ref.get()).exists) throw Object.assign(new Error('Списання не знайдено.'), { status: 404 });
     await ref.delete();
     await writeAudit(req, 'writeoff.delete', ref.id, {});
@@ -425,15 +449,16 @@ app.delete('/api/manage/writeoffs/:id', async (req, res) => {
 
 async function writeAudit(req, action, targetId, details) {
   try {
-    await dbForSession(req).collection('Cinema').doc(req.session.cinema).collection('AdminAudit').add({
-      action, targetId, details, actorId: req.session.userId, actorName: req.session.name || req.session.userId,
+    await dbForSession(req).collection('Cinema').doc(sessionCinema(req)).collection('AdminAudit').add({
+      action, targetId, details, actorId: req.session.developerAuthenticated === true ? ('developer:' + (req.session.developerName || 'Developer')) : req.session.userId,
+      actorName: req.session.developerAuthenticated === true ? (req.session.developerName || 'Developer') : (req.session.name || req.session.userId),
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
   } catch (error) { console.error('Audit log write failed:', error.message); }
 }
 app.get('/api/manage/activity', async (req, res) => {
   try {
-    const snap = await dbForSession(req).collection('Cinema').doc(req.session.cinema).collection('AdminAudit').orderBy('createdAt', 'desc').limit(100).get();
+    const snap = await dbForSession(req).collection('Cinema').doc(sessionCinema(req)).collection('AdminAudit').orderBy('createdAt', 'desc').limit(100).get();
     res.json({ items: snap.docs.map(toPlainDoc) });
   } catch (error) { publicError(res, error); }
 });
