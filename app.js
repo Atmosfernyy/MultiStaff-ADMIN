@@ -60,6 +60,25 @@ function showLogin(message = '') {
   document.querySelector('.shell').style.display = 'none';
   document.querySelector('#loginError').textContent = message;
 }
+function applyDeveloperProjects(state) {
+  const cinema = document.querySelector('#cinema');
+  if (!cinema || !state?.authenticated) return;
+  cinema.innerHTML = '';
+  for (const project of (state.projects || [])) {
+    const option = document.createElement('option');
+    option.value = project.key;
+    option.textContent = project.label + (project.configured ? '' : ' · не налаштовано');
+    option.disabled = !project.configured;
+    cinema.append(option);
+  }
+  const active = (state.projects || []).find(project => project.key === state.activeCinema && project.configured) || (state.projects || []).find(project => project.configured);
+  if (active) {
+    cinema.value = active.key;
+    if (currentUser) { currentUser.cinema = active.key; currentUser.cinemaLabel = active.label; }
+  }
+  cinema.disabled = false;
+  featureCinema = currentUser?.cinema || featureCinema;
+}
 function updateAccountBadge() {
   const access = document.querySelector('.access');
   if (!access || !currentUser) return;
@@ -78,21 +97,7 @@ async function showDashboard(user) {
     const state = await api('/api/developer/me');
     developerUnlocked = state.authenticated === true;
     if (developerUnlocked && cinema) {
-      cinema.innerHTML = '';
-      for (const project of (state.projects || [])) {
-        const option = document.createElement('option');
-        option.value = project.key;
-        option.textContent = project.label + (project.configured ? '' : ' · не налаштовано');
-        option.disabled = !project.configured;
-        cinema.append(option);
-      }
-      const active = (state.projects || []).find(project => project.key === state.activeCinema && project.configured) || (state.projects || []).find(project => project.configured);
-      if (active) {
-        cinema.value = active.key;
-        currentUser.cinema = active.key;
-        currentUser.cinemaLabel = active.label;
-      }
-      cinema.disabled = false;
+      applyDeveloperProjects(state);
     }
   } catch { developerUnlocked = false; }
   updateAccountBadge();
@@ -217,19 +222,7 @@ function developerGate() {
         developerUnlocked = true;
         const state = await api('/api/developer/me');
         const cinema = document.querySelector('#cinema');
-        if (cinema) {
-          cinema.innerHTML = '';
-          for (const project of (state.projects || [])) {
-            const option = document.createElement('option');
-            option.value = project.key;
-            option.textContent = project.label + (project.configured ? '' : ' · не налаштовано');
-            option.disabled = !project.configured;
-            cinema.append(option);
-          }
-          const active = (state.projects || []).find(project => project.key === state.activeCinema && project.configured) || (state.projects || []).find(project => project.configured);
-          if (active) { cinema.value = active.key; currentUser.cinema = active.key; currentUser.cinemaLabel = active.label; }
-          cinema.disabled = false;
-        }
+        if (cinema) applyDeveloperProjects(state);
         featureCinema = currentUser?.cinema || featureCinema;
         updateAccountBadge();
         form.reset();
@@ -249,6 +242,7 @@ async function openDeveloperFeatures() {
     try {
       const state = await api('/api/developer/me');
       developerUnlocked = state.authenticated === true;
+      if (developerUnlocked) { applyDeveloperProjects(state); updateAccountBadge(); }
     } catch { developerUnlocked = false; }
   }
   if (developerUnlocked) return loadBotFeatures(featureCinema);
