@@ -59,6 +59,7 @@ function showLogin(message = '') {
 }
 function showDashboard(user) {
   currentUser = user;
+  currentPage = pageFromLocation();
   document.querySelector('#loginScreen').hidden = true;
   document.querySelector('.shell').style.display = '';
   const access = document.querySelector('.access');
@@ -123,8 +124,27 @@ async function loadOverviewDashboard() {
     details.innerHTML = '<div class="overview-detail"><span>Стан</span><b class="bad">Не вдалося отримати дані</b></div>';
   }
 }
-function showPage(key) {
+const PAGE_PATHS = {
+  overview: '/home',
+  features: '/bot-functions',
+  staff: '/staff',
+  data: '/cinema-data',
+  diagnostics: '/stats',
+  activity: '/activity'
+};
+const PATH_PAGES = Object.fromEntries(Object.entries(PAGE_PATHS).map(([key, path]) => [path, key]));
+function pageFromLocation() {
+  const path = window.location.pathname.replace(/\\/$/, '') || '/';
+  return PATH_PAGES[path] || (path === '/' ? 'overview' : 'overview');
+}
+function showPage(key, options = {}) {
   currentPage = pages[key] ? key : 'overview';
+  const targetPath = PAGE_PATHS[currentPage];
+  if (!options.fromHistory && window.location.pathname !== targetPath) {
+    window.history.pushState({ page: currentPage }, '', targetPath);
+  }
+  const content = document.querySelector('.content');
+  if (content) content.dataset.page = currentPage;
   const p = pages[currentPage];
   document.querySelector('#title').textContent = p[0];
   document.querySelector('#crumb').textContent = p[1];
@@ -488,6 +508,9 @@ document.addEventListener('change', async event => {
     toast(error.message);
     toggle.checked = !enabled;
   } finally { if (toggle.isConnected) toggle.disabled = false; }
+});
+window.addEventListener('popstate', () => {
+  if (currentUser) showPage(pageFromLocation(), { fromHistory: true });
 });
 document.addEventListener('DOMContentLoaded', () => {
   const content = document.querySelector('.content');
