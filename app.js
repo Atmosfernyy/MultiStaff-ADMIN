@@ -60,17 +60,44 @@ function showLogin(message = '') {
   document.querySelector('.shell').style.display = 'none';
   document.querySelector('#loginError').textContent = message;
 }
-function showDashboard(user) {
-  currentUser = user;
+function updateAccountBadge() {
+  const access = document.querySelector('.access');
+  if (!access || !currentUser) return;
+  const label = developerUnlocked ? 'Developer · ' + currentUser.cinemaLabel : currentUser.cinemaLabel + ' · ' + currentUser.role;
+  access.innerHTML = '<i></i><div><b>' + escapeHtml(currentUser.name) + '</b><small>' + escapeHtml(label) + '</small></div>';
+}
+async function showDashboard(user) {
+  currentUser = { ...user, baseCinema: user.baseCinema || user.cinema, baseCinemaLabel: user.baseCinemaLabel || user.cinemaLabel };
   currentPage = pageFromLocation();
   document.querySelector('#loginScreen').hidden = true;
   document.querySelector('.shell').style.display = '';
-  const access = document.querySelector('.access');
-  if (access) access.innerHTML = '<i></i><div><b>' + escapeHtml(user.name) + '</b><small>' + escapeHtml(user.cinemaLabel) + ' · ' + escapeHtml(user.role) + '</small></div>';
   const cinema = document.querySelector('#cinema');
   if (cinema) { cinema.innerHTML = ''; const option = document.createElement('option'); option.value = user.cinema; option.textContent = user.cinemaLabel; cinema.append(option); cinema.disabled = true; }
+  developerUnlocked = false;
+  try {
+    const state = await api('/api/developer/me');
+    developerUnlocked = state.authenticated === true;
+    if (developerUnlocked && cinema) {
+      cinema.innerHTML = '';
+      for (const project of (state.projects || [])) {
+        const option = document.createElement('option');
+        option.value = project.key;
+        option.textContent = project.label + (project.configured ? '' : ' · не налаштовано');
+        option.disabled = !project.configured;
+        cinema.append(option);
+      }
+      const active = (state.projects || []).find(project => project.key === state.activeCinema && project.configured) || (state.projects || []).find(project => project.configured);
+      if (active) {
+        cinema.value = active.key;
+        currentUser.cinema = active.key;
+        currentUser.cinemaLabel = active.label;
+      }
+      cinema.disabled = false;
+    }
+  } catch { developerUnlocked = false; }
+  updateAccountBadge();
   const notice = document.querySelector('.notice');
-  if (notice) { notice.querySelector('strong').textContent = 'Firebase підключено'; notice.querySelector('p').textContent = 'Вхід виконано. Панель прив’язана до ' + user.cinemaLabel + '. Дані змінюються у відповідному проєкті Firebase.'; }
+  if (notice) { notice.querySelector('strong').textContent = 'Firebase підключено'; notice.querySelector('p').textContent = 'Панель працює з проєктом ' + currentUser.cinemaLabel + '. Дані зберігаються у відповідному Firebase.'; }
   const firebase = document.querySelector('#firebase');
   if (firebase) firebase.textContent = 'Секрети налаштовано';
   showPage(currentPage);
@@ -494,7 +521,7 @@ async function health() {
   }
 }
 async function checkSession() {
-  try { const d = await api('/api/auth/me'); showDashboard(d.user); }
+  try { const d = await api('/api/auth/me'); await showDashboard(d.user); }
   catch (error) {
     if (error.status === 401) showLogin();
     else { console.error('Session check failed:', error); toast(error.message || 'Не вдалося перевірити сесію. Спробуйте оновити сторінку пізніше.'); }
@@ -542,6 +569,28 @@ document.addEventListener('DOMContentLoaded', () => {
   heading.insertAdjacentElement('afterend', workspaceEl);
   document.querySelector('#refresh').addEventListener('click', () => { health(); if (currentPage === 'overview') loadOverviewDashboard(); else showPage(currentPage); toast('Оновлюю дані…'); });
   document.querySelector('#menu').addEventListener('click', () => document.querySelector('#sidebar').classList.toggle('open'));
+  document.querySelector('#cinema').addEventListener('change', async event => {
+    if (!developerUnlocked || !currentUser) return;
+    const selector = event.currentTarget;
+    const previousCinema = currentUser.cinema;
+    selector.disabled = true;
+    try {
+      const result = await api('/api/developer/switch-cinema', { method: 'POST', body: JSON.stringify({ cinema: selector.value }) });
+      currentUser.cinema = result.cinema;
+      currentUser.cinemaLabel = result.cinemaLabel;
+      staffCache = []; recipesCache = []; writeoffsCache = [];
+      editingStaffId = editingRecipeId = editingWriteoffId = null;
+      updateAccountBadge();
+      const notice = document.querySelector('.notice');
+      if (notice) notice.querySelector('p').textContent = 'Developer-доступ активний. Поточний проєкт: ' + result.cinemaLabel + '.';
+      if (currentPage === 'features') await loadBotFeatures(result.cinema);
+      else showPage(currentPage);
+      toast('Перемкнуто на ' + result.cinemaLabel);
+    } catch (error) {
+      selector.value = previousCinema;
+      toast(error.message || 'Не вдалося перемкнути кінотеатр.');
+    } finally { selector.disabled = false; }
+  });
   document.querySelector('#loginForm').addEventListener('submit', async event => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -550,7 +599,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('#loginError').textContent = '';
     try {
       const data = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ id: form.elements.id.value.trim(), password: form.elements.password.value }) });
-      form.reset(); showDashboard(data.user); health();
+      form.reset(); await showDashboard(data.user); health();
     } catch (error) { document.querySelector('#loginError').textContent = error.message || 'Помилка входу'; }
     finally { button.disabled = false; button.textContent = 'Увійти до панелі'; }
   });
