@@ -99,3 +99,44 @@ body.developer-locked .shell{filter:blur(5px);pointer-events:none;user-select:no
 .staff-search-panel>input#staffSearch::-webkit-search-cancel-button{-webkit-appearance:none;height:15px;width:15px;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239397a3' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 6 12 12M18 6 6 18'/%3E%3C/svg%3E");background-size:15px}
 .staff-search-panel>p{margin:9px 1px 0;color:#858b98;font-size:11px}
 @media(max-width:640px){.staff-search-panel{padding:15px}.staff-search-panel>input#staffSearch{height:46px;font-size:12px}}
+
+
+/* Authenticated home dashboard */
+.overview-dashboard{display:grid;gap:20px}
+.overview-dashboard[hidden]{display:none}
+.welcome-panel{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:25px 27px;border:1px solid #38303a;border-radius:15px;background:radial-gradient(ellipse at 85% 30%,rgba(237,59,72,.13),transparent 42%),linear-gradient(125deg,#1d1c23,#17191f);min-height:142px}
+.welcome-panel .eyebrow{margin:0 0 11px;font-size:9px}
+.welcome-panel h2{margin:0 0 8px;font-size:25px;letter-spacing:-.7px}
+.welcome-panel p:not(.eyebrow){margin:0;color:var(--muted);font-size:12px;line-height:1.6}
+.welcome-meta{display:flex;align-items:center;gap:9px;color:#a6a8b2;font-size:10px;white-space:nowrap;padding:9px 12px;border:1px solid #343640;border-radius:30px;background:#11131888}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px #51d6a177}
+.live-dot.offline{background:#ed5963;box-shadow:0 0 12px #ed596377}
+.overview-sectionhead{margin:4px 0 -5px}
+.overview-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
+.overview-stat{position:relative;min-width:0;padding:18px 18px 17px;border:1px solid var(--border);border-radius:12px;background:linear-gradient(145deg,#1c1e25,#17191f);overflow:hidden}
+.overview-stat:before{content:"";position:absolute;left:18px;top:0;width:34px;height:2px;background:#6b707c}
+.overview-stat.connected:before{background:var(--green)}
+.overview-stat.disconnected:before{background:#ed5963}
+.overview-stat label,.overview-stat small{display:block;color:var(--muted);font-size:10px}
+.overview-stat strong{display:block;margin:17px 0 9px;font-size:23px;letter-spacing:-.5px}
+.overview-stat small{font-size:10px;line-height:1.5}
+.overview-stat.connected strong{color:var(--green);font-size:19px}
+.overview-stat.disconnected strong{color:#ff737d;font-size:19px}
+.overview-lower{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}
+.overview-lower .panel{padding:19px}
+.overview-details{display:grid;gap:0}
+.overview-detail{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 0;border-top:1px solid #2b2d36;font-size:11px}
+.overview-detail span{color:var(--muted)}
+.overview-detail b{font-size:11px;text-align:right}
+.overview-detail .good{color:var(--green)}
+.overview-detail .bad{color:#ff737d}
+.overview-shortcuts>button{display:flex;align-items:center;gap:11px;width:100%;padding:10px 0;border:0;border-top:1px solid #2b2d36;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+.shortcut-icon{display:grid;place-items:center;width:33px;height:33px;border-radius:9px;font-style:normal}
+.overview-shortcuts>button>span:nth-child(2){display:grid;gap:4px}
+.overview-shortcuts>button b{font-size:11px}
+.overview-shortcuts>button small{font-size:10px;color:var(--muted)}
+.overview-shortcuts>button>i{margin-left:auto;color:#858895;font-style:normal}
+.overview-shortcuts>button:hover b{color:#ff7079}
+@media(max-width:1100px){.overview-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.welcome-panel{align-items:flex-start;flex-direction:column;padding:20px}.welcome-panel h2{font-size:22px}.overview-lower{grid-template-columns:1fr}.overview-stats{gap:9px}.overview-stat{padding:14px}.overview-stat strong{font-size:20px}}
+@media(max-width:380px){.overview-stats{grid-template-columns:1fr}}
