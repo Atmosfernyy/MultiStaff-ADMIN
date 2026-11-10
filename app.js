@@ -230,6 +230,7 @@ function developerGate() {
           if (active) { cinema.value = active.key; currentUser.cinema = active.key; currentUser.cinemaLabel = active.label; }
           cinema.disabled = false;
         }
+        featureCinema = currentUser?.cinema || featureCinema;
         updateAccountBadge();
         form.reset();
         overlay.remove();
