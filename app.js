@@ -48,8 +48,11 @@ async function api(url, options = {}) {
   const raw = await response.text();
   let data = {};
   try { data = raw ? JSON.parse(raw) : {}; } catch { throw new Error('Сервер повернув неочікувану відповідь. Перевірте логи Northflank.'); }
-  if (response.status === 401 && !url.startsWith('/api/developer/')) { showLogin('Сесія завершилася. Увійдіть ще раз.'); throw new Error(data.error || 'Потрібно увійти.'); }
-  if (!response.ok) throw new Error(data.error || 'Не вдалося виконати операцію.');
+  if (response.status === 401 && !url.startsWith('/api/developer/')) {
+    showLogin('Сесія завершилася. Увійдіть ще раз.');
+    const error = new Error(data.error || 'Потрібно увійти.'); error.status = 401; throw error;
+  }
+  if (!response.ok) { const error = new Error(data.error || 'Не вдалося виконати операцію.'); error.status = response.status; throw error; }
   return data;
 }
 function showLogin(message = '') {
@@ -492,7 +495,10 @@ async function health() {
 }
 async function checkSession() {
   try { const d = await api('/api/auth/me'); showDashboard(d.user); }
-  catch { showLogin(); }
+  catch (error) {
+    if (error.status === 401) showLogin();
+    else { console.error('Session check failed:', error); toast(error.message || 'Не вдалося перевірити сесію. Спробуйте оновити сторінку пізніше.'); }
+  }
 }
 document.addEventListener('click', event => {
   const dateSummary = event.target.closest('.writeoff-date-group > summary');
