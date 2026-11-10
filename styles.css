@@ -140,3 +140,14 @@ body.developer-locked .shell{filter:blur(5px);pointer-events:none;user-select:no
 @media(max-width:1100px){.overview-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.welcome-panel{align-items:flex-start;flex-direction:column;padding:20px}.welcome-panel h2{font-size:22px}.overview-lower{grid-template-columns:1fr}.overview-stats{gap:9px}.overview-stat{padding:14px}.overview-stat strong{font-size:20px}}
 @media(max-width:380px){.overview-stats{grid-template-columns:1fr}}
+
+
+/* Make each workspace section mutually exclusive with the home dashboard */
+.content[data-page]:not([data-page="overview"]) #overviewDashboard{display:none!important}
+.content[data-page="overview"] #workspace{display:none!important}
+.content[data-page="overview"] .heading #pageEyebrow{display:none}
+.content[data-page="overview"] .heading #title{display:none}
+.content[data-page="overview"] .heading #description{display:none}
+.content[data-page="overview"] .heading{min-height:0;margin:0;padding:0;border:0}
+.content[data-page="overview"] .heading .actions{position:absolute;top:22px;right:28px;z-index:2}
+#overviewDashboard[hidden]{display:none!important}
