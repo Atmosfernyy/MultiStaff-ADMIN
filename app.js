@@ -467,19 +467,27 @@ async function handleAction(button) {
   }
 }
 async function health() {
+  const status = document.querySelector('#health');
+  if (!status) return;
+  status.textContent = 'Перевірка сервера…';
+  status.classList.remove('online', 'offline');
   try {
-    const r = await fetch('/api/health', { cache: 'no-store', headers: { Accept: 'application/json' } });
-    if (!r.ok) throw Error('HTTP ' + r.status);
-    const d = await r.json();
-    document.querySelector('#health').textContent = '● Сервер відповідає';
-    document.querySelector('#server').textContent = 'Онлайн';
-    document.querySelector('#serverdetail').textContent = 'API відповідає коректно';
-    document.querySelector('#firebase').textContent = d.mode === 'firebase-configured' ? 'Три проєкти налаштовано' : d.configuredProjects.length + ' із 3 проєктів налаштовано';
-  } catch {
-    document.querySelector('#health').textContent = '● Немає зв’язку';
-    document.querySelector('#server').textContent = 'Недоступний';
-    document.querySelector('#serverdetail').textContent = 'Не вдалося перевірити API';
-    document.querySelector('#firebase').textContent = 'Не перевірено';
+    const response = await fetch('/api/health', {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' }
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const data = await response.json();
+    const configured = Array.isArray(data.configuredProjects) ? data.configuredProjects.length : 0;
+    status.textContent = data.ok
+      ? '● API онлайн · Firebase ' + configured + '/3'
+      : '● API відповідає з помилкою';
+    status.classList.toggle('online', Boolean(data.ok));
+    status.classList.toggle('offline', !data.ok);
+  } catch (error) {
+    status.textContent = '● Немає зв’язку з API';
+    status.classList.add('offline');
+    console.error('Health check failed:', error);
   }
 }
 async function checkSession() {
