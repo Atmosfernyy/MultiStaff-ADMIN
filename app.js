@@ -134,7 +134,7 @@ const PAGE_PATHS = {
 };
 const PATH_PAGES = Object.fromEntries(Object.entries(PAGE_PATHS).map(([key, path]) => [path, key]));
 function pageFromLocation() {
-  const path = window.location.pathname.replace(/\\/$/, '') || '/';
+  const path = window.location.pathname.replace(/\/$/, '') || '/';
   return PATH_PAGES[path] || (path === '/' ? 'overview' : 'overview');
 }
 function showPage(key, options = {}) {
