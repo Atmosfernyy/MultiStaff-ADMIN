@@ -468,4 +468,97 @@ app.use(express.static(ROOT, {
   maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0, etag: true
 }));
 app.get('*', (_req, res) => res.sendFile(path.join(ROOT, 'index.html')));
-app.listen(PORT, '0.0.0.0', () => console.log('MultiStaff ADMIN listening on port ' + PORT));
+
+
+// Google Sheets sync: listen to Firestore directly so website and bot writeoffs are both covered.
+// Initial test rollout is intentionally limited to Atmosfera.
+function writeoffDateKey(data) {
+  const value = data?.createdAt;
+  let date = null;
+  if (value && typeof value.toDate === 'function') date = value.toDate();
+  else if (value instanceof Date) date = value;
+  else if (value && typeof value.seconds === 'number') date = new Date(value.seconds * 1000);
+  else if (typeof value === 'string' || typeof value === 'number') date = new Date(value);
+  if (!date || Number.isNaN(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Kyiv', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(date);
+  const part = type => parts.find(item => item.type === type)?.value;
+  return part('year') + '-' + part('month') + '-' + part('day');
+}
+
+async function postWriteoffTotalsToSheets(date, ingredients) {
+  const url = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+  const token = process.env.GOOGLE_SHEETS_SYNC_TOKEN;
+  if (!url || !token) throw new Error('Google Sheets sync environment variables are missing.');
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, date, ingredients }),
+    signal: AbortSignal.timeout(20000)
+  });
+  const bodyText = await response.text();
+  let result;
+  try { result = JSON.parse(bodyText); }
+  catch { throw new Error('Google Sheets returned a non-JSON response (HTTP ' + response.status + ').'); }
+  if (!response.ok || result.ok !== true) {
+    throw new Error('Google Sheets sync failed: ' + (result.error || ('HTTP ' + response.status)));
+  }
+  console.log('[Sheets sync] Atmosfera ' + date + ': updated ' + result.updated + ' ingredient rows.');
+}
+
+function startWriteoffSheetsSync() {
+  if (!process.env.GOOGLE_SHEETS_WEBHOOK_URL || !process.env.GOOGLE_SHEETS_SYNC_TOKEN) {
+    console.log('[Sheets sync] Disabled: webhook URL or sync token is missing.');
+    return;
+  }
+
+  try {
+    const writeoffsRef = getFirestore('atmosfera')
+      .collection('Cinema').doc('atmosfera').collection('Writeoffs');
+    let syncQueue = Promise.resolve();
+
+    writeoffsRef.onSnapshot(snapshot => {
+      const affectedDates = new Set();
+      for (const change of snapshot.docChanges()) {
+        const date = writeoffDateKey(change.doc.data());
+        if (date) affectedDates.add(date);
+      }
+      if (!affectedDates.size) return;
+
+      // Queue snapshots to prevent an older update from overwriting a newer total.
+      syncQueue = syncQueue.then(async () => {
+        for (const date of affectedDates) {
+          const totals = {};
+          for (const doc of snapshot.docs) {
+            const data = doc.data() || {};
+            if (writeoffDateKey(data) !== date) continue;
+            const ingredients = data.totalIngredients;
+            if (!ingredients || typeof ingredients !== 'object' || Array.isArray(ingredients)) continue;
+            for (const [name, rawAmount] of Object.entries(ingredients)) {
+              const amount = Number(rawAmount);
+              if (!Number.isFinite(amount)) continue;
+              totals[name] = (totals[name] || 0) + amount;
+            }
+          }
+          await postWriteoffTotalsToSheets(date, totals);
+        }
+      }).catch(error => {
+        console.error('[Sheets sync] Atmosfera listener processing failed:', error.message);
+      });
+    }, error => {
+      console.error('[Sheets sync] Firestore listener failed:', error.message);
+    });
+
+    console.log('[Sheets sync] Firestore listener started for Atmosfera.');
+  } catch (error) {
+    console.error('[Sheets sync] Could not start Firestore listener:', error.message);
+  }
+}
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log('MultiStaff ADMIN listening on port ' + PORT);
+  startWriteoffSheetsSync();
+});
