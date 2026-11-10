@@ -72,9 +72,56 @@ function showDashboard(user) {
   showPage(currentPage);
 }
 function setOverviewVisible(visible) {
-  document.querySelectorAll('.content > .notice, .content > .sectionhead, .content > .stats, .content > .modules, .content > .bottomgrid, .content > footer').forEach(el => {
-    el.style.display = visible ? '' : 'none';
-  });
+  const dashboard = document.querySelector('#overviewDashboard');
+  if (dashboard) dashboard.hidden = !visible;
+}
+function formatShortDate(value) {
+  if (!value) return '—';
+  const date = value._seconds ? new Date(value._seconds * 1000) : value.seconds ? new Date(value.seconds * 1000) : new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('uk-UA', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+async function loadOverviewDashboard() {
+  if (!currentUser || currentPage !== 'overview') return;
+  const name = currentUser.name || 'користувачу';
+  const hour = new Date().getHours();
+  const greeting = hour < 11 ? 'Доброго ранку' : hour < 18 ? 'Доброго дня' : 'Доброго вечора';
+  document.querySelector('#welcomeTitle').textContent = greeting + ', ' + name + '!';
+  document.querySelector('#welcomeSubtitle').textContent = 'Ось короткий огляд роботи ' + currentUser.cinemaLabel + ' на цей момент.';
+  document.querySelector('#welcomeCinema').textContent = currentUser.cinemaLabel + ' · ' + String(currentUser.role || '').toUpperCase();
+  const stats = document.querySelector('#overviewStats');
+  const details = document.querySelector('#overviewDetails');
+  stats.innerHTML = Array.from({length:4},()=>'<article class="overview-stat"><label>Завантаження</label><strong>—</strong><small>Отримуємо дані…</small></article>').join('');
+  try {
+    const results = await Promise.allSettled([
+      api('/api/manage/staff'),
+      api('/api/manage/recipes'),
+      api('/api/manage/writeoffs'),
+      fetch('/api/health',{cache:'no-store',headers:{Accept:'application/json'}}).then(r=>{if(!r.ok)throw new Error('Health check failed');return r.json();})
+    ]);
+    if (currentPage !== 'overview') return;
+    const staff = results[0].status === 'fulfilled' ? (results[0].value.items || []) : null;
+    const recipes = results[1].status === 'fulfilled' ? (results[1].value.items || []) : null;
+    const writeoffs = results[2].status === 'fulfilled' ? (results[2].value.items || []) : null;
+    const healthData = results[3].status === 'fulfilled' ? results[3].value : null;
+    const connected = Boolean(staff || recipes || writeoffs);
+    const activeStaff = staff ? staff.filter(person => person.isBlocked !== true).length : null;
+    const latestWriteoff = writeoffs?.[0];
+    const latestWriteoffDate = latestWriteoff ? formatShortDate(latestWriteoff.createdAt) : 'Поки немає';
+    const cards = [
+      {label:'Працівники',value:staff ? staff.length : '—',detail:staff ? activeStaff + ' активних · ' + (staff.length-activeStaff) + ' заблоковано' : 'Не вдалося завантажити'},
+      {label:'Рецепти',value:recipes ? recipes.length : '—',detail:recipes ? 'Записів у базі кінотеатру' : 'Не вдалося завантажити'},
+      {label:'Списання',value:writeoffs ? writeoffs.length : '—',detail:writeoffs ? 'Усього збережених записів' : 'Не вдалося завантажити'},
+      {label:'Firebase',value:connected ? 'Підключено' : 'Немає зв’язку',detail:connected ? currentUser.cinemaLabel + ' · дані отримано' : 'Перевірте доступ до проєкту'}
+    ];
+    stats.innerHTML = cards.map((card,index)=>'<article class="overview-stat '+(index===3?(connected?'connected':'disconnected'):'')+'"><label>'+escapeHtml(card.label)+'</label><strong>'+escapeHtml(card.value)+'</strong><small>'+escapeHtml(card.detail)+'</small></article>').join('');
+    details.innerHTML = '<div class="overview-detail"><span>Останнє списання</span><b>'+escapeHtml(latestWriteoffDate)+'</b></div><div class="overview-detail"><span>Активних працівників</span><b>'+escapeHtml(activeStaff == null ? '—' : activeStaff)+'</b></div><div class="overview-detail"><span>Статус API</span><b class="'+(healthData?.ok?'good':'bad')+'">'+(healthData?.ok?'Працює':'Не відповідає')+'</b></div>';
+    document.querySelector('#overviewUpdated').textContent = 'ОНОВЛЕНО ' + new Date().toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});
+    const dot = document.querySelector('.welcome-meta .live-dot');
+    dot?.classList.toggle('offline',!connected);
+  } catch (error) {
+    stats.innerHTML = '<article class="overview-stat disconnected"><label>Firebase</label><strong>Помилка</strong><small>'+escapeHtml(error.message)+'</small></article>';
+    details.innerHTML = '<div class="overview-detail"><span>Стан</span><b class="bad">Не вдалося отримати дані</b></div>';
+  }
 }
 function showPage(key) {
   currentPage = pages[key] ? key : 'overview';
@@ -88,6 +135,7 @@ function showPage(key) {
   if (currentPage === 'overview') {
     workspace.hidden = true;
     setOverviewVisible(true);
+    loadOverviewDashboard();
     return;
   }
   setOverviewVisible(false);
@@ -447,7 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
   workspaceEl.id = 'workspace'; workspaceEl.hidden = true;
   const heading = content.querySelector('.heading');
   heading.insertAdjacentElement('afterend', workspaceEl);
-  document.querySelector('#refresh').addEventListener('click', () => { health(); if (currentPage !== 'overview') showPage(currentPage); toast('Оновлюю дані…'); });
+  document.querySelector('#refresh').addEventListener('click', () => { health(); if (currentPage === 'overview') loadOverviewDashboard(); else showPage(currentPage); toast('Оновлюю дані…'); });
   document.querySelector('#menu').addEventListener('click', () => document.querySelector('#sidebar').classList.toggle('open'));
   document.querySelector('#loginForm').addEventListener('submit', async event => {
     event.preventDefault();
