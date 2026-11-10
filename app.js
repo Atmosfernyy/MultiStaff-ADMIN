@@ -495,6 +495,14 @@ async function checkSession() {
   catch { showLogin(); }
 }
 document.addEventListener('click', event => {
+  const dateSummary = event.target.closest('.writeoff-date-group > summary');
+  if (dateSummary) {
+    event.preventDefault();
+    event.stopPropagation();
+    const group = dateSummary.parentElement;
+    group.open = !group.open;
+    return;
+  }
   const button = event.target.closest('[data-action]');
   if (button && button.dataset.action !== 'bot-toggle') handleAction(button);
   const nav = event.target.closest('[data-page]');
