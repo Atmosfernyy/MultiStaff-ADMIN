@@ -505,7 +505,7 @@ document.addEventListener('click', event => {
   }
   const button = event.target.closest('[data-action]');
   if (button && button.dataset.action !== 'bot-toggle') handleAction(button);
-  const nav = event.target.closest('[data-page]');
+  const nav = event.target.closest('.nav[data-page]');
   if (nav) showPage(nav.dataset.page);
 });
 document.addEventListener('change', async event => {
