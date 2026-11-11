@@ -246,6 +246,19 @@ app.put('/api/developer/features/:cinema/:feature', requireDeveloper, async (req
   } catch (error) { publicError(res, error); }
 });
 
+app.get('/api/developer/integrations/:cinema', requireDeveloper, (req, res) => {
+  const cinema = PROJECTS.find(project => project.key === req.params.cinema);
+  if (!cinema) return res.status(400).json({ error: 'Невідомий кінотеатр.' });
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    cinema: cinema.key,
+    googleSheets: {
+      configured: Boolean(process.env.GOOGLE_SHEETS_WEBHOOK_URL && process.env.GOOGLE_SHEETS_SYNC_TOKEN),
+      tabName: cinema.key === 'atmosfera' ? 'Атмосфера' : cinema.key === 'karavan' ? 'Караван' : 'Retroville'
+    }
+  });
+});
+
 app.use('/api/manage', requireSession);
 
 // Staff: Cinema/{cinema}/Users/{userId}
