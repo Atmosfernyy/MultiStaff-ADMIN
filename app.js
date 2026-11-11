@@ -1,6 +1,8 @@
 const pages = {
   overview: ['Огляд', 'Огляд', ''],
+  developer: ['Developer', 'Developer', 'Інструменти розробника, інтеграції та керування Telegram-ботами.'],
   features: ['Функції бота', 'Функції бота', 'Управління доступністю розділів Telegram-бота.'],
+  integrations: ['Інтеграції', 'Інтеграції', 'Підключення зовнішніх сервісів та синхронізація даних.'],
   staff: ['Працівники', 'Працівники', 'Користувачі, ролі, Telegram ID та права доступу.'],
   data: ['Дані кінотеатру', 'Дані кінотеатру', 'Рецепти та списання вибраного кінотеатру.'],
   diagnostics: ['Діагностика', 'Діагностика', 'Стан сервера, Firebase та оновлення даних.'],
@@ -161,7 +163,9 @@ async function loadOverviewDashboard() {
 }
 const PAGE_PATHS = {
   overview: '/home',
-  features: '/bot-functions',
+  developer: '/developer',
+  features: '/developer/bot-functions',
+  integrations: '/developer/integrations',
   staff: '/staff',
   data: '/cinema-data',
   diagnostics: '/stats',
@@ -184,7 +188,8 @@ function showPage(key, options = {}) {
   document.querySelector('#title').textContent = p[0];
   document.querySelector('#crumb').textContent = p[1];
   document.querySelector('#description').textContent = p[2];
-  document.querySelectorAll('.nav[data-page]').forEach(el => el.classList.toggle('active', el.dataset.page === currentPage));
+  document.querySelectorAll('[data-page]').forEach(el => el.classList.toggle('active', el.dataset.page === currentPage));
+  document.querySelector('.nav-group')?.classList.toggle('expanded', ['developer','features','integrations'].includes(currentPage));
   document.querySelector('#sidebar').classList.remove('open');
   const workspace = document.querySelector('#workspace');
   if (currentPage === 'overview') {
@@ -196,7 +201,9 @@ function showPage(key, options = {}) {
   setOverviewVisible(false);
   workspace.hidden = false;
   workspace.innerHTML = '<div class="panel"><p>Завантаження…</p></div>';
-  if (currentPage === 'staff') loadStaff();
+  if (currentPage === 'developer') renderDeveloperHome();
+  else if (currentPage === 'integrations') loadIntegrations();
+  else if (currentPage === 'staff') loadStaff();
   else if (currentPage === 'data') renderDataPage();
   else if (currentPage === 'activity') loadActivity();
   else if (currentPage === 'features') openDeveloperFeatures();
@@ -236,6 +243,24 @@ function developerGate() {
   document.body.classList.add('developer-locked');
   overlay.hidden = false;
   setTimeout(() => overlay.querySelector('input[name="login"]')?.focus(), 0);
+}
+function renderDeveloperHome() {
+  workspace().innerHTML = '<section class="developer-hub"><div class="developer-hub-head"><span class="developer-mark">⌘</span><div><p class="eyebrow red">MULTISTAFF · DEVELOPER WORKSPACE</p><h2>Developer</h2><p class="muted">Центр керування ботами та зовнішніми сервісами.</p></div></div><div class="developer-cards"><button class="developer-card-link" data-page="features"><span class="developer-card-icon">◈</span><b>Функції бота</b><small>Керування доступністю розділів Telegram-бота для кожного кінотеатру.</small><i>Відкрити　↗</i></button><button class="developer-card-link" data-page="integrations"><span class="developer-card-icon">⌁</span><b>Інтеграції</b><small>Google Sheets та інші зовнішні сервіси, стан підключення і синхронізація.</small><i>Відкрити　↗</i></button></div></section>';
+}
+async function loadIntegrations() {
+  if (!developerUnlocked) {
+    try { const state = await api('/api/developer/me'); developerUnlocked = state.authenticated === true; }
+    catch { developerUnlocked = false; }
+  }
+  if (!developerUnlocked) {
+    workspace().innerHTML = '<section class="panel"><h2>Інтеграції</h2><p class="muted">Цей розділ потребує окремого Developer-входу.</p><button class="primary" data-action="developer-login">Увійти як Developer</button></section>';
+    developerGate(); return;
+  }
+  try {
+    const result = await api('/api/developer/integrations/' + encodeURIComponent(currentUser?.cinema || featureCinema));
+    const sheets = result.googleSheets;
+    workspace().innerHTML = '<section class="panel"><div class="workspace-head"><div><h2>Підключені сервіси</h2><p class="muted">Інтеграції серверної частини MultiStaff для вибраного кінотеатру.</p></div><span class="pill '+(sheets.configured?'success':'warning')+'">'+(sheets.configured?'Підключено':'Не налаштовано')+'</span></div><article class="integration-card"><div class="integration-icon">▦</div><div class="integration-main"><b>Google Sheets</b><small>Автоматична синхронізація списань з Firestore у таблицю.</small><div class="integration-meta"><span class="pill '+(sheets.configured?'success':'danger')+'">'+(sheets.configured?'Webhook налаштовано':'Відсутні параметри сервера')+'</span><span class="muted small">'+escapeHtml(sheets.tabName || 'Вкладка кінотеатру')+'</span></div></div><span class="integration-state '+(sheets.configured?'good':'bad')+'">'+(sheets.configured?'● Активна':'● Немає зв’язку')+'</span></article><div class="integration-help"><b>Налаштування підключення</b><p>Адреса Web App та токен синхронізації зберігаються в змінних середовища Northflank. Вони не показуються в браузері з міркувань безпеки.</p><ul><li><code>GOOGLE_SHEETS_WEBHOOK_URL</code></li><li><code>GOOGLE_SHEETS_SYNC_TOKEN</code></li></ul><p class="muted">Для зміни таблиці оновіть цільовий <code>SPREADSHEET_ID</code> у властивостях Apps Script. Перезапуск Northflank для цього не потрібен.</p></div></section><section class="panel integration-next"><h2>Інші інтеграції</h2><p class="muted">Тут можна буде підключити додаткові сервіси без зміни основної панелі.</p><div class="integration-placeholder"><span>＋</span><div><b>Нова інтеграція</b><small>Місце для наступного підключення</small></div><span class="pill">Незабаром</span></div></section>';
+  } catch (error) { workspace().innerHTML = '<section class="panel"><h2>Не вдалося завантажити інтеграції</h2><p class="form-error">'+escapeHtml(error.message)+'</p></section>'; }
 }
 async function openDeveloperFeatures() {
   if (!developerUnlocked) {
@@ -549,7 +574,7 @@ document.addEventListener('click', event => {
   }
   const button = event.target.closest('[data-action]');
   if (button && button.dataset.action !== 'bot-toggle') handleAction(button);
-  const nav = event.target.closest('.nav[data-page]');
+  const nav = event.target.closest('[data-page]');
   if (nav) showPage(nav.dataset.page);
 });
 document.addEventListener('change', async event => {
@@ -595,6 +620,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const notice = document.querySelector('.notice');
       if (notice) notice.querySelector('p').textContent = 'Developer-доступ активний. Поточний проєкт: ' + result.cinemaLabel + '.';
       if (currentPage === 'features') await loadBotFeatures(result.cinema);
+      else if (currentPage === 'integrations') await loadIntegrations();
       else showPage(currentPage);
       toast('Перемкнуто на ' + result.cinemaLabel);
     } catch (error) {
