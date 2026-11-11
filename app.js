@@ -235,7 +235,10 @@ function developerGate() {
         form.reset();
         overlay.remove();
         document.body.classList.remove('developer-locked');
-        await loadBotFeatures(featureCinema);
+        if (currentPage === 'features') await loadBotFeatures(featureCinema);
+        else if (currentPage === 'integrations') await loadIntegrations();
+        else if (currentPage === 'developer') renderDeveloperHome();
+        else await loadBotFeatures(featureCinema);
       } catch (error) { errorEl.textContent = error.message; }
       finally { if (button.isConnected) { button.disabled = false; button.textContent = 'Відкрити керування'; } }
     });
