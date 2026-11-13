@@ -182,7 +182,13 @@ body.developer-locked .shell{filter:blur(5px);pointer-events:none;user-select:no
 .system-monitor-ok b{color:#8ce7bd;font-size:13px}
 .system-monitor-ok small{color:#9baea5;font-size:11px}
 .monitor-count{font-size:11px;color:#c2c4ce}
+.monitor-events-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0}
+.monitor-events-actions>small{font-size:10px;color:var(--muted)}
+.monitor-events-actions>button{border:1px solid var(--border);border-radius:8px;background:#252832;color:#e6e7ec;padding:8px 11px;font:inherit;font-size:11px;cursor:pointer}
+.monitor-events-actions>button:hover{background:#343844}
+.monitor-events-actions>button:disabled{opacity:.55;cursor:wait}
 .monitor-list{display:grid;gap:8px}
+@media(max-width:520px){.monitor-events-actions{align-items:flex-start;flex-direction:column}.monitor-events-actions>button{align-self:flex-end}}
 .monitor-event{display:grid;grid-template-columns:30px minmax(0,1fr) auto;align-items:start;gap:11px;padding:13px;border:1px solid var(--border);border-radius:10px;background:#15171d}
 .monitor-event-mark{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#343027;color:#f3c66d;font-weight:800}
 .monitor-event.error .monitor-event-mark{background:#3a2025;color:#ff8991}
