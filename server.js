@@ -311,7 +311,11 @@ app.post('/api/manage/system-sync/writeoffs', requireSession, async (req, res) =
     const db = dbForSession(req);
     const configSnap = await db.collection('Cinema').doc(cinema).collection('BotConfig').doc('googleSheets').get();
     const config = configSnap.exists ? (configSnap.data() || {}) : {};
-    if (!config.spreadsheetId) throw Object.assign(new Error('Спочатку збережи посилання на Google Sheets у налаштуваннях інтеграції.'), { status: 400 });
+    if (!config.spreadsheetId) throw Object.assign(new Error('У Firestore не збережено spreadsheetId. Відкрий інтеграцію, натисни «Зберегти» і повтори.'), { status: 400 });
+    const urlId = (String(config.spreadsheetUrl || '').match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/) || [])[1] || '';
+    if (urlId && urlId !== config.spreadsheetId) {
+      throw Object.assign(new Error('ID таблиці у збереженому посиланні не збігається зі spreadsheetId у Firestore. Передачу зупинено, щоб не записати дані не туди.'), { status: 409 });
+    }
     if (!process.env.GOOGLE_SHEETS_WEBHOOK_URL || !process.env.GOOGLE_SHEETS_SYNC_TOKEN) throw Object.assign(new Error('На сервері не налаштовано Google Sheets webhook або токен.'), { status: 503 });
     const snapshot = await db.collection('Cinema').doc(cinema).collection('Writeoffs').get();
     if (snapshot.empty) throw Object.assign(new Error('У Firebase поки немає списань для перенесення.'), { status: 404 });
@@ -369,6 +373,9 @@ app.get('/api/manage/system-status', requireSession, async (req, res) => {
       webhookConfigured: Boolean(process.env.GOOGLE_SHEETS_WEBHOOK_URL && process.env.GOOGLE_SHEETS_SYNC_TOKEN),
       enabled: config.enabled === true,
       spreadsheetConfigured: Boolean(config.spreadsheetId),
+      spreadsheetId: config.spreadsheetId || null,
+      spreadsheetUrlId: (String(config.spreadsheetUrl || '').match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/) || [])[1] || null,
+      scriptSpreadsheetId: sync.scriptSpreadsheetId || null,
       lastStatus: sync.status || 'never',
       lastAttemptAt: sync.lastAttemptAt || null,
       lastSuccessAt: sync.lastSuccessAt || null,
@@ -731,6 +738,7 @@ async function postWriteoffTotalsToSheets(cinema, date, ingredients, items, shee
     lastSuccessAt: admin.firestore.FieldValue.serverTimestamp(),
     lastDate: date,
     updated: Number(result.updated || 0),
+    scriptSpreadsheetId: result.spreadsheet || null,
     issueCount: issues.length,
     lastError: issues.length ? issues.slice(0, 10).map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' | ').slice(0, 1500) : null
   });
