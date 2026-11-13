@@ -119,6 +119,7 @@ function formatShortDate(value) {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('uk-UA', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
 }
 async function loadOverviewDashboard() {
+  loadSystemMonitor();
   if (!currentUser || currentPage !== 'overview') return;
   const name = currentUser.name || 'користувачу';
   const hour = new Date().getHours();
@@ -161,6 +162,29 @@ async function loadOverviewDashboard() {
     details.innerHTML = '<div class="overview-detail"><span>Стан</span><b class="bad">Не вдалося отримати дані</b></div>';
   }
 }
+
+async function loadSystemMonitor() {
+  const host = document.querySelector('#systemMonitorEvents');
+  if (!host || !currentUser) return;
+  try {
+    const result = await api('/api/manage/system-events');
+    const events = result.items || [];
+    const active = events.filter(item => item.status !== 'resolved');
+    if (!events.length) {
+      host.innerHTML = '<div class="system-monitor-ok"><span class="monitor-check">✓</span><div><b>Система працює без помилок!</b><small>Поки що системних подій не зафіксовано.</small></div></div>';
+      return;
+    }
+    host.innerHTML = (active.length ? '<div class="monitor-count">'+active.length+' активних подій</div>' : '<div class="system-monitor-ok compact"><span class="monitor-check">✓</span><div><b>Активних проблем немає</b><small>Історія подій збережена нижче.</small></div></div>') +
+      '<div class="monitor-list">' + events.map(item => {
+        const resolved = item.status === 'resolved';
+        const type = ['error','warning','info'].includes(item.type) ? item.type : 'warning';
+        return '<article class="monitor-event '+type+(resolved?' resolved':'')+'"><div class="monitor-event-mark">'+(type==='error'?'!':type==='warning'?'⚠':'i')+'</div><div class="monitor-event-body"><div class="monitor-event-top"><b>'+escapeHtml(item.title || 'Системна подія')+'</b><span class="monitor-pill '+(resolved?'resolved':type)+'">'+(resolved?'Вирішено':type==='error'?'Помилка':type==='warning'?'Попередження':'Інформація')+'</span></div><p>'+escapeHtml(item.description || '')+'</p><small>'+escapeHtml(item.source || 'System Monitor')+' · '+escapeHtml(formatDate(item.createdAt))+(resolved && item.resolvedBy?' · Вирішив: '+escapeHtml(item.resolvedBy):'')+'</small></div>'+(resolved?'':'<button type="button" data-action="system-event-resolve" data-id="'+escapeHtml(item.id)+'">Позначити вирішеним</button>')+'</article>';
+      }).join('')+'</div>';
+  } catch (error) {
+    host.innerHTML = '<div class="monitor-error">Не вдалося завантажити System Monitor: '+escapeHtml(error.message)+'</div>';
+  }
+}
+
 const PAGE_PATHS = {
   overview: '/home',
   developer: '/developer',
@@ -539,6 +563,16 @@ async function handleAction(button) {
     document.querySelector('#loginForm')?.reset();
     showLogin('Ви вийшли з акаунта. Увійдіть знову, щоб продовжити.');
     if (button) { button.disabled = false; button.innerHTML = '<span>↪</span> Вийти з акаунта'; }
+    return;
+  }
+  if (action === 'system-monitor-refresh') return loadSystemMonitor();
+  if (action === 'system-event-resolve') {
+    button.disabled = true;
+    try {
+      await api('/api/manage/system-events/' + encodeURIComponent(id), { method:'PATCH', body:JSON.stringify({resolved:true}) });
+      toast('Подію позначено як вирішену');
+      await loadSystemMonitor();
+    } catch(error) { toast(error.message); button.disabled = false; }
     return;
   }
   if (action === 'developer-login') return developerGate();
