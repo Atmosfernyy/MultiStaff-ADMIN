@@ -193,7 +193,6 @@ async function loadSystemMonitor() {
     const eventContent = !events.length
       ? '<div class="system-monitor-ok"><span class="monitor-check">✓</span><div><b>Система працює без помилок!</b><small>Поки що системних подій не зафіксовано.</small></div></div>'
       : (active.length ? '<div class="monitor-count">'+active.length+' активних подій</div>' : '<div class="system-monitor-ok compact"><span class="monitor-check">✓</span><div><b>Активних проблем немає</b><small>Історія подій збережена нижче.</small></div></div>') +
-      '<div class="monitor-events-actions"><small>Показано записів: '+events.length+(events.length===100?' (останні 100)':'')+'</small><button type="button" data-action="system-events-clear">Очистити історію</button></div>' +
       '<div class="monitor-list">' + events.map(item => {
         const resolved = item.status === 'resolved';
         const type = ['error','warning','info'].includes(item.type) ? item.type : 'warning';
