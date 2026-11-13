@@ -188,6 +188,7 @@ async function loadSystemMonitor() {
     const diagnostics = '<div class="monitor-sync-card"><div class="monitor-sync-head"><b>Google Sheets · ' + escapeHtml(status.cinema || '') + '</b><span class="monitor-pill '+stateClass+'">'+escapeHtml(stateLabel)+'</span></div>' +
       '<div class="monitor-sync-grid"><div><small>Автоматична синхронізація</small><b>'+(status.enabled?'Увімкнена':'Вимкнена')+'</b></div><div><small>Webhook / таблиця</small><b>'+(status.webhookConfigured && status.spreadsheetConfigured?'Налаштовано':'Не налаштовано')+'</b></div><div><small>Остання успішна передача</small><b>'+escapeHtml(lastTime)+'</b></div><div><small>Оновлено рядків</small><b>'+Number(status.updated || 0)+'</b></div></div>' +
       '<small class="monitor-sync-foot">'+dateText+(status.issueCount?' · Попереджень: '+Number(status.issueCount):'')+'</small>' +
+      '<small class="monitor-sync-foot">ID у Firestore: '+escapeHtml(status.spreadsheetId || 'не збережено')+' · ID, який відкрив Apps Script: '+escapeHtml(status.scriptSpreadsheetId || 'ще не підтверджено')+'</small>' +
       (status.lastError?'<p class="monitor-sync-error">'+escapeHtml(status.lastError)+'</p>':'')+'</div>';
     const eventContent = !events.length
       ? '<div class="system-monitor-ok"><span class="monitor-check">✓</span><div><b>Система працює без помилок!</b><small>Поки що системних подій не зафіксовано.</small></div></div>'
