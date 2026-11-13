@@ -304,6 +304,55 @@ app.put('/api/developer/integrations/:cinema', requireDeveloper, async (req, res
 
 
 
+
+app.post('/api/manage/system-sync/writeoffs', requireSession, async (req, res) => {
+  const cinema = sessionCinema(req);
+  try {
+    const db = dbForSession(req);
+    const configSnap = await db.collection('Cinema').doc(cinema).collection('BotConfig').doc('googleSheets').get();
+    const config = configSnap.exists ? (configSnap.data() || {}) : {};
+    if (!config.spreadsheetId) throw Object.assign(new Error('Спочатку збережи посилання на Google Sheets у налаштуваннях інтеграції.'), { status: 400 });
+    if (!process.env.GOOGLE_SHEETS_WEBHOOK_URL || !process.env.GOOGLE_SHEETS_SYNC_TOKEN) throw Object.assign(new Error('На сервері не налаштовано Google Sheets webhook або токен.'), { status: 503 });
+    const snapshot = await db.collection('Cinema').doc(cinema).collection('Writeoffs').get();
+    if (snapshot.empty) throw Object.assign(new Error('У Firebase поки немає списань для перенесення.'), { status: 404 });
+    const byDate = new Map();
+    for (const doc of snapshot.docs) {
+      const data = doc.data() || {};
+      const date = writeoffDateKey(data);
+      if (!date) continue;
+      if (!byDate.has(date)) byDate.set(date, {});
+      const totals = byDate.get(date);
+      const ingredients = data.totalIngredients;
+      if (!ingredients || typeof ingredients !== 'object' || Array.isArray(ingredients)) continue;
+      for (const [name, rawAmount] of Object.entries(ingredients)) {
+        const amount = Number(rawAmount);
+        if (name && Number.isFinite(amount)) totals[name] = (totals[name] || 0) + amount;
+      }
+    }
+    if (!byDate.size) throw Object.assign(new Error('Не знайшов списань із коректною датою у Firebase.'), { status: 400 });
+    const dates = [...byDate.keys()].sort();
+    await updateSheetsSyncStatus(cinema, { status:'syncing', lastAttemptAt:admin.firestore.FieldValue.serverTimestamp(), lastDate:dates[dates.length-1], lastError:null });
+    let updated = 0;
+    const issues = [];
+    for (const date of dates) {
+      const result = await postWriteoffTotalsToSheets(cinema, date, byDate.get(date), {}, config, { force:true });
+      updated += Number(result?.updated || 0);
+      if (Array.isArray(result?.issues)) issues.push(...result.issues.map(issue => ({date, issue})));
+    }
+    await recordSystemEvent(cinema, {
+      type: issues.length ? 'warning' : 'info', source:'Google Sheets · ручне завантаження',
+      title:'Виконано ручне завантаження списань',
+      description:'Оброблено дат: '+dates.length+'; оновлено рядків: '+updated+'; проблем: '+issues.length+'.',
+      metadata:{dates,updated,issueCount:issues.length,ingredientsOnly:true}
+    });
+    res.json({ok:true,dates:dates.length,updated,issueCount:issues.length,issues:issues.slice(0,30)});
+  } catch(error) {
+    await updateSheetsSyncStatus(cinema,{status:'error',lastAttemptAt:admin.firestore.FieldValue.serverTimestamp(),lastError:error.message,issueCount:0});
+    await recordSystemEvent(cinema,{type:'error',source:'Google Sheets · ручне завантаження',title:'Не вдалося завантажити списання',description:error.message});
+    publicError(res,error);
+  }
+});
+
 app.get('/api/manage/system-status', requireSession, async (req, res) => {
   try {
     const cinema = sessionCinema(req);
@@ -628,11 +677,11 @@ async function updateSheetsSyncStatus(cinema, values) {
   }
 }
 
-async function postWriteoffTotalsToSheets(cinema, date, ingredients, items, sheetsConfig = null) {
+async function postWriteoffTotalsToSheets(cinema, date, ingredients, items, sheetsConfig = null, options = {}) {
   const url = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
   const token = process.env.GOOGLE_SHEETS_SYNC_TOKEN;
   if (!url || !token) throw new Error('Google Sheets webhook URL або токен не налаштовано.');
-  if (sheetsConfig?.enabled !== true) {
+  if (sheetsConfig?.enabled !== true && options.force !== true) {
     await updateSheetsSyncStatus(cinema, {
       status: 'disabled', lastDate: date, lastError: null, issueCount: 0
     });
@@ -687,6 +736,7 @@ async function postWriteoffTotalsToSheets(cinema, date, ingredients, items, shee
   });
   console.log('[Sheets sync] ' + cinema + ' ' + date + ': updated ' +
     (result.updated ?? 0) + ' rows; issues ' + issues.length + '.');
+  return result;
 }
 
 function startWriteoffSheetsSync() {
