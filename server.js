@@ -303,7 +303,7 @@ app.put('/api/developer/integrations/:cinema', requireDeveloper, async (req, res
 });
 
 
-app.get('/api/manage/system-events', async (req, res) => {
+app.get('/api/manage/system-events', requireSession, async (req, res) => {
   try {
     const snap = await dbForSession(req).collection('Cinema').doc(sessionCinema(req))
       .collection('SystemEvents').orderBy('createdAt', 'desc').limit(100).get();
@@ -311,7 +311,7 @@ app.get('/api/manage/system-events', async (req, res) => {
     res.json({ items: snap.docs.map(toPlainDoc) });
   } catch (error) { publicError(res, error); }
 });
-app.patch('/api/manage/system-events/:id', async (req, res) => {
+app.patch('/api/manage/system-events/:id', requireSession, async (req, res) => {
   try {
     const id = safeId(req.params.id);
     const ref = dbForSession(req).collection('Cinema').doc(sessionCinema(req)).collection('SystemEvents').doc(id);
