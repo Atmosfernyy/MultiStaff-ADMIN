@@ -119,8 +119,10 @@ function formatShortDate(value) {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('uk-UA', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
 }
 async function loadOverviewDashboard() {
-  loadSystemMonitor();
   if (!currentUser || currentPage !== 'overview') return;
+  const monitor = document.querySelector('#systemMonitorEvents');
+  if (monitor) monitor.closest('.system-monitor-panel').hidden = false;
+  loadSystemMonitor();
   const name = currentUser.name || 'користувачу';
   const hour = new Date().getHours();
   const greeting = hour < 11 ? 'Доброго ранку' : hour < 18 ? 'Доброго дня' : 'Доброго вечора';
@@ -582,6 +584,21 @@ async function handleAction(button) {
     return;
   }
   if (action === 'system-monitor-refresh') return loadSystemMonitor();
+  if (action === 'system-sync-writeoffs') {
+    if (!confirm('Завантажити всі збережені списання з Firebase у Google Sheets? Буде оновлено лише лист «Сировина». Лист «Штучка» не змінюватиметься.')) return;
+    button.disabled = true;
+    const original = button.textContent;
+    button.textContent = 'Завантаження…';
+    try {
+      const result = await api('/api/manage/system-sync/writeoffs', { method:'POST', body:JSON.stringify({}) });
+      toast('Завантажено: дат ' + result.dates + ', рядків ' + result.updated + (result.issueCount ? ', проблем ' + result.issueCount : ''));
+      await loadSystemMonitor();
+    } catch(error) {
+      toast(error.message || 'Не вдалося завантажити списання');
+      await loadSystemMonitor();
+    } finally { if (button.isConnected) { button.disabled = false; button.textContent = original; } }
+    return;
+  }
   if (action === 'system-event-resolve') {
     button.disabled = true;
     try {
