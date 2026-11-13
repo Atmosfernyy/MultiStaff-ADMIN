@@ -279,7 +279,9 @@ async function loadIntegrations() {
         <div class="integration-help"><b>Безпека</b><p>Токен Web App залишається у змінних середовища Northflank. Посилання та відповідності зберігаються у Firebase відповідного кінотеатру.</p></div>
       </section>`;
     const list = document.querySelector('#sheetsMappings');
-    document.querySelector('#addSheetsMapping')?.addEventListener('click', () => {
+    document.querySelector('#addSheetsMapping')?.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
       list.insertAdjacentHTML('beforeend', sheetsMappingRow({category:'ingredients'}, list.children.length));
     });
     list.addEventListener('click', event => {
@@ -614,6 +616,9 @@ async function checkSession() {
   }
 }
 document.addEventListener('click', event => {
+  // Never let the global navigation/action handler interpret clicks inside
+  // the Google Sheets editor as page navigation.
+  if (event.target.closest('#sheetsSettingsForm')) return;
   const dateSummary = event.target.closest('.writeoff-date-group > summary');
   if (dateSummary) {
     event.preventDefault();
