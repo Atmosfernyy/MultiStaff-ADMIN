@@ -215,3 +215,8 @@ body.developer-locked .shell{filter:blur(5px);pointer-events:none;user-select:no
 .monitor-pill.success{background:#1d3b2e;color:#78dcb0}
 .monitor-pill.neutral{background:#292b33;color:#c0c2cc}
 @media(max-width:800px){.monitor-sync-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+.system-monitor-panel[hidden]{display:none!important}
+.monitor-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.monitor-actions button{white-space:nowrap}
