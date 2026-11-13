@@ -256,14 +256,61 @@ async function loadIntegrations() {
     catch { developerUnlocked = false; }
   }
   if (!developerUnlocked) {
-    workspace().innerHTML = '<section class="panel"><h2>Інтеграції</h2><p class="muted">Цей розділ потребує окремого Developer-входу.</p><button class="primary" data-action="developer-login">Увійти як Developer</button></section>';
+    workspace().innerHTML = '<section class="panel"><h2>Google Sheets</h2><p class="muted">Цей розділ потребує окремого Developer-входу.</p><button class="primary" data-action="developer-login">Увійти як Developer</button></section>';
     developerGate(); return;
   }
+  const cinema = currentUser?.cinema || featureCinema || 'atmosfera';
   try {
-    const result = await api('/api/developer/integrations/' + encodeURIComponent(currentUser?.cinema || featureCinema));
-    const sheets = result.googleSheets;
-    workspace().innerHTML = '<section class="panel"><div class="workspace-head"><div><h2>Підключені сервіси</h2><p class="muted">Інтеграції серверної частини MultiStaff для вибраного кінотеатру.</p></div><span class="pill '+(sheets.configured?'success':'warning')+'">'+(sheets.configured?'Підключено':'Не налаштовано')+'</span></div><article class="integration-card"><div class="integration-icon">▦</div><div class="integration-main"><b>Google Sheets</b><small>Автоматична синхронізація списань з Firestore у таблицю.</small><div class="integration-meta"><span class="pill '+(sheets.configured?'success':'danger')+'">'+(sheets.configured?'Webhook налаштовано':'Відсутні параметри сервера')+'</span><span class="muted small">'+escapeHtml(sheets.tabName || 'Вкладка кінотеатру')+'</span></div></div><span class="integration-state '+(sheets.configured?'good':'bad')+'">'+(sheets.configured?'● Активна':'● Немає зв’язку')+'</span></article><div class="integration-help"><b>Налаштування підключення</b><p>Адреса Web App та токен синхронізації зберігаються в змінних середовища Northflank. Вони не показуються в браузері з міркувань безпеки.</p><ul><li><code>GOOGLE_SHEETS_WEBHOOK_URL</code></li><li><code>GOOGLE_SHEETS_SYNC_TOKEN</code></li></ul><p class="muted">Для зміни таблиці оновіть цільовий <code>SPREADSHEET_ID</code> у властивостях Apps Script. Перезапуск Northflank для цього не потрібен.</p></div></section><section class="panel integration-next"><h2>Інші інтеграції</h2><p class="muted">Тут можна буде підключити додаткові сервіси без зміни основної панелі.</p><div class="integration-placeholder"><span>＋</span><div><b>Нова інтеграція</b><small>Місце для наступного підключення</small></div><span class="pill">Незабаром</span></div></section>';
+    const result = await api('/api/developer/integrations/' + encodeURIComponent(cinema));
+    const cfg = result.googleSheets || {};
+    const mappings = cfg.mappings || [];
+    workspace().innerHTML = `
+      <section class="panel">
+        <div class="workspace-head"><div><h2>Google Sheets</h2><p class="muted">Налаштування автоматичного перенесення списань для ${escapeHtml(cinema)}.</p></div><span class="pill ${cfg.configured ? 'success' : 'warning'}">${cfg.configured ? 'Webhook налаштовано' : 'Потрібне підключення'}</span></div>
+        <form id="sheetsSettingsForm" class="sheets-settings-form">
+          <label class="field-label" for="sheetsUrl">Посилання на Google-таблицю</label>
+          <input id="sheetsUrl" type="url" placeholder="https://docs.google.com/spreadsheets/d/..." value="${escapeHtml(cfg.spreadsheetUrl || '')}">
+          <div class="feature-row"><div><b>Автоматична синхронізація</b><small>Поки вимкнена — нова конфігурація не впливає на робочі списання.</small></div><label class="switch"><input id="sheetsEnabled" type="checkbox" ${cfg.enabled ? 'checked' : ''}><span></span></label></div>
+          <div class="grid-two"><div><label class="field-label" for="sheetsIngredientsTab">Лист для сировини</label><input id="sheetsIngredientsTab" value="${escapeHtml(cfg.tabs?.ingredients || 'Сировина')}"></div><div><label class="field-label" for="sheetsItemsTab">Лист для штучних товарів</label><input id="sheetsItemsTab" value="${escapeHtml(cfg.tabs?.items || 'Штучка')}"></div></div>
+          <div class="sectionhead"><div><h3>Змінні та відповідності</h3><p>Назва в боті → назва рядка в таблиці.</p></div><button type="button" class="secondary" id="addSheetsMapping">＋ Додати</button></div>
+          <div id="sheetsMappings" class="sheets-mappings">${mappings.map((m,i)=>sheetsMappingRow(m,i)).join('')}</div>
+          <div class="form-actions"><button class="primary" type="submit">Зберегти налаштування</button><span id="sheetsSaveStatus" class="muted small"></span></div>
+        </form>
+        <div class="integration-help"><b>Безпека</b><p>Токен Web App залишається у змінних середовища Northflank. Посилання та відповідності зберігаються у Firebase відповідного кінотеатру.</p></div>
+      </section>`;
+    const list = document.querySelector('#sheetsMappings');
+    document.querySelector('#addSheetsMapping')?.addEventListener('click', () => {
+      list.insertAdjacentHTML('beforeend', sheetsMappingRow({category:'ingredients'}, list.children.length));
+    });
+    list.addEventListener('click', event => {
+      if (event.target.closest('[data-remove-mapping]')) event.target.closest('.sheets-mapping-row')?.remove();
+    });
+    document.querySelector('#sheetsSettingsForm')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const status = document.querySelector('#sheetsSaveStatus');
+      const button = event.currentTarget.querySelector('button[type="submit"]');
+      button.disabled = true; status.textContent = 'Збереження…';
+      try {
+        const rows = [...list.querySelectorAll('.sheets-mapping-row')].map(row => ({
+          botName: row.querySelector('[data-map-bot]').value.trim(),
+          sheetName: row.querySelector('[data-map-sheet]').value.trim(),
+          category: row.querySelector('[data-map-category]').value
+        }));
+        await api('/api/developer/integrations/' + encodeURIComponent(cinema), {method:'PUT', body:JSON.stringify({
+          spreadsheetUrl: document.querySelector('#sheetsUrl').value,
+          enabled: document.querySelector('#sheetsEnabled').checked,
+          tabs:{ingredients:document.querySelector('#sheetsIngredientsTab').value,items:document.querySelector('#sheetsItemsTab').value},
+          mappings:rows
+        })});
+        status.textContent = 'Налаштування збережено у Firebase.';
+        toast('Налаштування Google Sheets збережено');
+      } catch(error) { status.textContent = error.message; }
+      finally { button.disabled = false; }
+    });
   } catch (error) { workspace().innerHTML = '<section class="panel"><h2>Не вдалося завантажити інтеграції</h2><p class="form-error">'+escapeHtml(error.message)+'</p></section>'; }
+}
+function sheetsMappingRow(mapping = {}, index = 0) {
+  return '<div class="sheets-mapping-row"><select data-map-category aria-label="Тип товару"><option value="ingredients" '+(mapping.category !== 'items' ? 'selected' : '')+'>Сировина</option><option value="items" '+(mapping.category === 'items' ? 'selected' : '')+'>Штучка</option></select><input data-map-bot placeholder="Назва в боті" value="'+escapeHtml(mapping.botName || '')+'"><span class="mapping-arrow">→</span><input data-map-sheet placeholder="Назва в таблиці" value="'+escapeHtml(mapping.sheetName || '')+'"><button type="button" class="icon-button" data-remove-mapping aria-label="Видалити відповідність">×</button></div>';
 }
 async function openDeveloperFeatures() {
   if (!developerUnlocked) {
