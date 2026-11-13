@@ -302,6 +302,31 @@ app.put('/api/developer/integrations/:cinema', requireDeveloper, async (req, res
   } catch (error) { publicError(res, error); }
 });
 
+
+app.get('/api/manage/system-events', async (req, res) => {
+  try {
+    const snap = await dbForSession(req).collection('Cinema').doc(sessionCinema(req))
+      .collection('SystemEvents').orderBy('createdAt', 'desc').limit(100).get();
+    res.set('Cache-Control', 'no-store');
+    res.json({ items: snap.docs.map(toPlainDoc) });
+  } catch (error) { publicError(res, error); }
+});
+app.patch('/api/manage/system-events/:id', async (req, res) => {
+  try {
+    const id = safeId(req.params.id);
+    const ref = dbForSession(req).collection('Cinema').doc(sessionCinema(req)).collection('SystemEvents').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) throw Object.assign(new Error('Подію не знайдено.'), { status: 404 });
+    const resolved = req.body?.resolved === true;
+    await ref.set({
+      status: resolved ? 'resolved' : 'open',
+      resolvedAt: resolved ? admin.firestore.FieldValue.serverTimestamp() : null,
+      resolvedBy: resolved ? (req.session.name || req.session.userId) : null
+    }, { merge: true });
+    res.json({ ok: true, id, status: resolved ? 'resolved' : 'open' });
+  } catch (error) { publicError(res, error); }
+});
+
 app.use('/api/manage', requireSession);
 
 // Staff: Cinema/{cinema}/Users/{userId}
@@ -544,6 +569,24 @@ function writeoffDateKey(data) {
   return part('year') + '-' + part('month') + '-' + part('day');
 }
 
+
+async function recordSystemEvent(cinema, event) {
+  try {
+    const ref = getFirestore(cinema).collection('Cinema').doc(cinema).collection('SystemEvents');
+    await ref.add({
+      type: event.type || 'warning',
+      source: event.source || 'Google Sheets',
+      title: cleanText(event.title, 180) || 'Подія системи',
+      description: cleanText(event.description, 1200),
+      status: 'open',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      metadata: event.metadata || {}
+    });
+  } catch (error) {
+    console.error('[System Monitor] Could not save event for ' + cinema + ':', error.message);
+  }
+}
+
 async function postWriteoffTotalsToSheets(cinema, date, ingredients, items, sheetsConfig = null) {
   const url = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
   const token = process.env.GOOGLE_SHEETS_SYNC_TOKEN;
@@ -574,6 +617,16 @@ async function postWriteoffTotalsToSheets(cinema, date, ingredients, items, shee
     throw new Error('Google Sheets sync failed: ' + (result.error || ('HTTP ' + response.status)));
   }
   if (Array.isArray(result.issues) && result.issues.length) {
+    for (const issue of result.issues) {
+      const description = typeof issue === 'string' ? issue : JSON.stringify(issue);
+      await recordSystemEvent(cinema, {
+        type: 'warning',
+        source: 'Google Sheets · ' + date,
+        title: 'Проблема під час перенесення списань',
+        description,
+        metadata: { date }
+      });
+    }
     console.error('[Sheets sync] ' + cinema + ' ' + date + ' issues:', JSON.stringify(result.issues));
   }
   console.log('[Sheets sync] ' + cinema + ' (' + (result.sheets || result.sheet || 'Google Sheets') + ') ' + date +
@@ -627,11 +680,23 @@ function startWriteoffSheetsSync() {
             const sheetsConfig = configSnap.exists ? (configSnap.data() || {}) : null;
             await postWriteoffTotalsToSheets(cinema, date, totals, itemTotals, sheetsConfig);
           }
-        }).catch(error => {
+        }).catch(async error => {
           console.error('[Sheets sync] ' + cinema + ' listener processing failed:', error.message);
+          await recordSystemEvent(cinema, {
+            type: 'error',
+            source: 'Google Sheets sync',
+            title: 'Не вдалося синхронізувати списання',
+            description: error.message
+          });
         });
-      }, error => {
+      }, async error => {
         console.error('[Sheets sync] ' + cinema + ' Firestore listener failed:', error.message);
+        await recordSystemEvent(cinema, {
+          type: 'error',
+          source: 'Firestore listener',
+          title: 'Втрачено зв’язок із потоком списань',
+          description: error.message
+        });
       });
 
       console.log('[Sheets sync] Firestore listener started for ' + cinema + '.');
