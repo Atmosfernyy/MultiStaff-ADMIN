@@ -592,7 +592,7 @@ async function handleAction(button) {
     button.textContent = 'Завантаження…';
     try {
       const result = await api('/api/manage/system-sync/writeoffs', { method:'POST', body:JSON.stringify({}) });
-      toast('Завантажено: дат ' + result.dates + ', рядків ' + result.updated + (result.issueCount ? ', проблем ' + result.issueCount : ''));
+      toast('Завантажено: дат ' + result.dates + ', рядків ' + result.updated + (result.skippedCount ? ', пропущено без колонки ' + result.skippedCount : '') + (result.issueCount ? ', проблем ' + result.issueCount : ''));
       await loadSystemMonitor();
     } catch(error) {
       toast(error.message || 'Не вдалося завантажити списання');
