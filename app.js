@@ -259,7 +259,7 @@ async function loadIntegrations() {
     workspace().innerHTML = '<section class="panel"><h2>Google Sheets</h2><p class="muted">Цей розділ потребує окремого Developer-входу.</p><button class="primary" data-action="developer-login">Увійти як Developer</button></section>';
     developerGate(); return;
   }
-  const cinema = currentUser?.cinema || featureCinema || 'atmosfera';
+  const cinema = document.querySelector('#cinema')?.value || featureCinema || currentUser?.cinema || 'atmosfera';
   try {
     const result = await api('/api/developer/integrations/' + encodeURIComponent(cinema));
     const cfg = result.googleSheets || {};
@@ -624,7 +624,10 @@ document.addEventListener('click', event => {
   }
   const button = event.target.closest('[data-action]');
   if (button && button.dataset.action !== 'bot-toggle') handleAction(button);
-  const nav = event.target.closest('[data-page]');
+  // Only actual navigation controls may switch pages. The workspace itself also
+  // carries page metadata, so matching any [data-page] caused every click in
+  // forms/inputs to re-render the page and discard edits.
+  const nav = event.target.closest('button.nav[data-page], button.nav-sub[data-page], button.developer-card-link[data-page], .overview-shortcuts button[data-page]');
   if (nav) showPage(nav.dataset.page);
 });
 document.addEventListener('change', async event => {
