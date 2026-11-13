@@ -167,19 +167,35 @@ async function loadSystemMonitor() {
   const host = document.querySelector('#systemMonitorEvents');
   if (!host || !currentUser) return;
   try {
-    const result = await api('/api/manage/system-events');
+    const [result, status] = await Promise.all([
+      api('/api/manage/system-events'),
+      api('/api/manage/system-status')
+    ]);
     const events = result.items || [];
     const active = events.filter(item => item.status !== 'resolved');
-    if (!events.length) {
-      host.innerHTML = '<div class="system-monitor-ok"><span class="monitor-check">✓</span><div><b>Система працює без помилок!</b><small>Поки що системних подій не зафіксовано.</small></div></div>';
-      return;
-    }
-    host.innerHTML = (active.length ? '<div class="monitor-count">'+active.length+' активних подій</div>' : '<div class="system-monitor-ok compact"><span class="monitor-check">✓</span><div><b>Активних проблем немає</b><small>Історія подій збережена нижче.</small></div></div>') +
+    const state = status.lastStatus;
+    const stateLabel = state === 'success' ? 'Остання передача успішна'
+      : state === 'warning' ? 'Передача завершилась з попередженнями'
+      : state === 'error' ? 'Помилка останньої передачі'
+      : state === 'syncing' ? 'Передача виконується'
+      : state === 'disabled' ? 'Синхронізацію вимкнено'
+      : 'Передач ще не було';
+    const stateClass = state === 'success' ? 'success' : state === 'warning' ? 'warning' : state === 'error' ? 'error' : 'neutral';
+    const dateText = status.lastDate ? 'Дата списання: ' + escapeHtml(status.lastDate) : 'Дата списання: —';
+    const lastTime = status.lastSuccessAt ? formatDate(status.lastSuccessAt) : 'ще не було';
+    const diagnostics = '<div class="monitor-sync-card"><div class="monitor-sync-head"><b>Google Sheets · ' + escapeHtml(status.cinema || '') + '</b><span class="monitor-pill '+stateClass+'">'+escapeHtml(stateLabel)+'</span></div>' +
+      '<div class="monitor-sync-grid"><div><small>Автоматична синхронізація</small><b>'+(status.enabled?'Увімкнена':'Вимкнена')+'</b></div><div><small>Webhook / таблиця</small><b>'+(status.webhookConfigured && status.spreadsheetConfigured?'Налаштовано':'Не налаштовано')+'</b></div><div><small>Остання успішна передача</small><b>'+escapeHtml(lastTime)+'</b></div><div><small>Оновлено рядків</small><b>'+Number(status.updated || 0)+'</b></div></div>' +
+      '<small class="monitor-sync-foot">'+dateText+(status.issueCount?' · Попереджень: '+Number(status.issueCount):'')+'</small>' +
+      (status.lastError?'<p class="monitor-sync-error">'+escapeHtml(status.lastError)+'</p>':'')+'</div>';
+    const eventContent = !events.length
+      ? '<div class="system-monitor-ok"><span class="monitor-check">✓</span><div><b>Система працює без помилок!</b><small>Поки що системних подій не зафіксовано.</small></div></div>'
+      : (active.length ? '<div class="monitor-count">'+active.length+' активних подій</div>' : '<div class="system-monitor-ok compact"><span class="monitor-check">✓</span><div><b>Активних проблем немає</b><small>Історія подій збережена нижче.</small></div></div>') +
       '<div class="monitor-list">' + events.map(item => {
         const resolved = item.status === 'resolved';
         const type = ['error','warning','info'].includes(item.type) ? item.type : 'warning';
         return '<article class="monitor-event '+type+(resolved?' resolved':'')+'"><div class="monitor-event-mark">'+(type==='error'?'!':type==='warning'?'⚠':'i')+'</div><div class="monitor-event-body"><div class="monitor-event-top"><b>'+escapeHtml(item.title || 'Системна подія')+'</b><span class="monitor-pill '+(resolved?'resolved':type)+'">'+(resolved?'Вирішено':type==='error'?'Помилка':type==='warning'?'Попередження':'Інформація')+'</span></div><p>'+escapeHtml(item.description || '')+'</p><small>'+escapeHtml(item.source || 'System Monitor')+' · '+escapeHtml(formatDate(item.createdAt))+(resolved && item.resolvedBy?' · Вирішив: '+escapeHtml(item.resolvedBy):'')+'</small></div>'+(resolved?'':'<button type="button" data-action="system-event-resolve" data-id="'+escapeHtml(item.id)+'">Позначити вирішеним</button>')+'</article>';
       }).join('')+'</div>';
+    host.innerHTML = diagnostics + eventContent;
   } catch (error) {
     host.innerHTML = '<div class="monitor-error">Не вдалося завантажити System Monitor: '+escapeHtml(error.message)+'</div>';
   }
