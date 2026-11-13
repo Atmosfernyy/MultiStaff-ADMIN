@@ -544,15 +544,26 @@ function writeoffDateKey(data) {
   return part('year') + '-' + part('month') + '-' + part('day');
 }
 
-async function postWriteoffTotalsToSheets(cinema, date, ingredients) {
+async function postWriteoffTotalsToSheets(cinema, date, ingredients, items, sheetsConfig = null) {
   const url = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
   const token = process.env.GOOGLE_SHEETS_SYNC_TOKEN;
   if (!url || !token) throw new Error('Google Sheets sync environment variables are missing.');
 
+  const payload = sheetsConfig?.enabled === true
+    ? {
+        token, cinema, date, ingredients, items,
+        config: {
+          spreadsheetId: sheetsConfig.spreadsheetId,
+          tabs: sheetsConfig.tabs || { ingredients: 'Сировина', items: 'Штучка' },
+          mappings: Array.isArray(sheetsConfig.mappings) ? sheetsConfig.mappings : []
+        }
+      }
+    : { token, cinema, date, ingredients };
+
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token, cinema, date, ingredients }),
+    body: JSON.stringify(payload),
     signal: AbortSignal.timeout(20000)
   });
   const bodyText = await response.text();
@@ -562,8 +573,11 @@ async function postWriteoffTotalsToSheets(cinema, date, ingredients) {
   if (!response.ok || result.ok !== true) {
     throw new Error('Google Sheets sync failed: ' + (result.error || ('HTTP ' + response.status)));
   }
-  console.log('[Sheets sync] ' + cinema + ' (' + result.sheet + ') ' + date +
-    ': updated ' + result.updated + ' ingredient rows.');
+  if (Array.isArray(result.issues) && result.issues.length) {
+    console.error('[Sheets sync] ' + cinema + ' ' + date + ' issues:', JSON.stringify(result.issues));
+  }
+  console.log('[Sheets sync] ' + cinema + ' (' + (result.sheets || result.sheet || 'Google Sheets') + ') ' + date +
+    ': updated ' + (result.updated ?? 0) + ' rows; issues ' + (result.issues?.length || 0) + '.');
 }
 
 function startWriteoffSheetsSync() {
@@ -591,6 +605,7 @@ function startWriteoffSheetsSync() {
         syncQueue = syncQueue.then(async () => {
           for (const date of affectedDates) {
             const totals = {};
+            const itemTotals = {};
             for (const doc of snapshot.docs) {
               const data = doc.data() || {};
               if (writeoffDateKey(data) !== date) continue;
@@ -601,8 +616,16 @@ function startWriteoffSheetsSync() {
                 if (!Number.isFinite(amount)) continue;
                 totals[name] = (totals[name] || 0) + amount;
               }
+              for (const item of (Array.isArray(data.items) ? data.items : [])) {
+                const name = String(item?.name || '').trim();
+                const amount = Number(item?.weight);
+                if (!name || !Number.isFinite(amount)) continue;
+                itemTotals[name] = (itemTotals[name] || 0) + amount;
+              }
             }
-            await postWriteoffTotalsToSheets(cinema, date, totals);
+            const configSnap = await getFirestore(cinema).collection('Cinema').doc(cinema).collection('BotConfig').doc('googleSheets').get();
+            const sheetsConfig = configSnap.exists ? (configSnap.data() || {}) : null;
+            await postWriteoffTotalsToSheets(cinema, date, totals, itemTotals, sheetsConfig);
           }
         }).catch(error => {
           console.error('[Sheets sync] ' + cinema + ' listener processing failed:', error.message);
