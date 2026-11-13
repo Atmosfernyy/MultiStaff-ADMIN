@@ -246,17 +246,60 @@ app.put('/api/developer/features/:cinema/:feature', requireDeveloper, async (req
   } catch (error) { publicError(res, error); }
 });
 
-app.get('/api/developer/integrations/:cinema', requireDeveloper, (req, res) => {
-  const cinema = PROJECTS.find(project => project.key === req.params.cinema);
-  if (!cinema) return res.status(400).json({ error: 'Невідомий кінотеатр.' });
-  res.set('Cache-Control', 'no-store');
-  res.json({
-    cinema: cinema.key,
-    googleSheets: {
-      configured: Boolean(process.env.GOOGLE_SHEETS_WEBHOOK_URL && process.env.GOOGLE_SHEETS_SYNC_TOKEN),
-      tabName: cinema.key === 'atmosfera' ? 'Атмосфера' : cinema.key === 'karavan' ? 'Караван' : 'Retroville'
-    }
-  });
+app.get('/api/developer/integrations/:cinema', requireDeveloper, async (req, res) => {
+  try {
+    const cinema = PROJECTS.find(project => project.key === req.params.cinema);
+    if (!cinema) return res.status(400).json({ error: 'Невідомий кінотеатр.' });
+    const db = getFirestore(cinema.key);
+    const ref = db.collection('Cinema').doc(cinema.key).collection('BotConfig').doc('googleSheets');
+    const snap = await ref.get();
+    const stored = snap.exists ? (snap.data() || {}) : {};
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      cinema: cinema.key,
+      googleSheets: {
+        configured: Boolean(process.env.GOOGLE_SHEETS_WEBHOOK_URL && process.env.GOOGLE_SHEETS_SYNC_TOKEN),
+        enabled: stored.enabled === true,
+        spreadsheetUrl: stored.spreadsheetUrl || '',
+        spreadsheetId: stored.spreadsheetId || '',
+        tabs: stored.tabs || { ingredients: 'Сировина', items: 'Штучка' },
+        mappings: Array.isArray(stored.mappings) ? stored.mappings : [],
+        updatedAt: stored.updatedAt || null,
+        tabName: cinema.key === 'atmosfera' ? 'Атмосфера' : cinema.key === 'karavan' ? 'Караван' : 'Retroville'
+      }
+    });
+  } catch (error) { publicError(res, error); }
+});
+app.put('/api/developer/integrations/:cinema', requireDeveloper, async (req, res) => {
+  try {
+    const cinema = PROJECTS.find(project => project.key === req.params.cinema);
+    if (!cinema) throw Object.assign(new Error('Невідомий кінотеатр.'), { status: 400 });
+    const body = req.body || {};
+    const spreadsheetUrl = String(body.spreadsheetUrl || '').trim();
+    const spreadsheetId = (spreadsheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/) || [])[1] || '';
+    if (spreadsheetUrl && !spreadsheetId) throw Object.assign(new Error('Вкажіть коректне посилання Google Sheets.'), { status: 400 });
+    const mappings = Array.isArray(body.mappings) ? body.mappings.map(item => ({
+      botName: cleanText(item?.botName, 180),
+      sheetName: cleanText(item?.sheetName, 180),
+      category: item?.category === 'items' ? 'items' : 'ingredients'
+    })).filter(item => item.botName && item.sheetName) : [];
+    if (mappings.length > 1000) throw Object.assign(new Error('Забагато відповідностей (максимум 1000).'), { status: 400 });
+    const tabs = {
+      ingredients: cleanText(body.tabs?.ingredients, 80) || 'Сировина',
+      items: cleanText(body.tabs?.items, 80) || 'Штучка'
+    };
+    const db = getFirestore(cinema.key);
+    await db.collection('Cinema').doc(cinema.key).collection('BotConfig').doc('googleSheets').set({
+      enabled: body.enabled === true,
+      spreadsheetUrl,
+      spreadsheetId,
+      tabs,
+      mappings,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: req.session.developerName || 'Developer'
+    }, { merge: true });
+    res.json({ ok: true, cinema: cinema.key, spreadsheetId, mappings: mappings.length });
+  } catch (error) { publicError(res, error); }
 });
 
 app.use('/api/manage', requireSession);
