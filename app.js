@@ -193,6 +193,7 @@ async function loadSystemMonitor() {
     const eventContent = !events.length
       ? '<div class="system-monitor-ok"><span class="monitor-check">✓</span><div><b>Система працює без помилок!</b><small>Поки що системних подій не зафіксовано.</small></div></div>'
       : (active.length ? '<div class="monitor-count">'+active.length+' активних подій</div>' : '<div class="system-monitor-ok compact"><span class="monitor-check">✓</span><div><b>Активних проблем немає</b><small>Історія подій збережена нижче.</small></div></div>') +
+      '<div class="monitor-events-actions"><small>Показано записів: '+events.length+(events.length===100?' (останні 100)':'')+'</small><button type="button" data-action="system-events-clear">Очистити історію</button></div>' +
       '<div class="monitor-list">' + events.map(item => {
         const resolved = item.status === 'resolved';
         const type = ['error','warning','info'].includes(item.type) ? item.type : 'warning';
@@ -598,6 +599,22 @@ async function handleAction(button) {
       toast(error.message || 'Не вдалося завантажити списання');
       await loadSystemMonitor();
     } finally { if (button.isConnected) { button.disabled = false; button.textContent = original; } }
+    return;
+  }
+  if (action === 'system-events-clear') {
+    if (!confirm('Удалить всю историю системных событий текущего кинотеатра? Это действие нельзя отменить. Настройки интеграции, списания и данные Google Sheets не затрагиваются.')) return;
+    button.disabled = true;
+    const original = button.textContent;
+    button.textContent = 'Очистка…';
+    try {
+      const result = await api('/api/manage/system-events', { method:'DELETE' });
+      toast('История очищена. Удалено событий: ' + Number(result.deleted || 0));
+      await loadSystemMonitor();
+    } catch(error) {
+      toast(error.message || 'Не удалось очистить историю');
+    } finally {
+      if (button.isConnected) { button.disabled = false; button.textContent = original; }
+    }
     return;
   }
   if (action === 'system-event-resolve') {
