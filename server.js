@@ -402,6 +402,21 @@ app.get('/api/manage/system-events', requireSession, async (req, res) => {
     res.json({ items: snap.docs.map(toPlainDoc) });
   } catch (error) { publicError(res, error); }
 });
+app.delete('/api/manage/system-events', requireSession, async (req, res) => {
+  try {
+    const collection = dbForSession(req).collection('Cinema').doc(sessionCinema(req)).collection('SystemEvents');
+    let deleted = 0;
+    while (true) {
+      const snap = await collection.limit(450).get();
+      if (snap.empty) break;
+      const batch = dbForSession(req).batch();
+      for (const doc of snap.docs) batch.delete(doc.ref);
+      await batch.commit();
+      deleted += snap.size;
+    }
+    res.json({ ok: true, deleted });
+  } catch (error) { publicError(res, error); }
+});
 app.patch('/api/manage/system-events/:id', requireSession, async (req, res) => {
   try {
     const id = safeId(req.params.id);
