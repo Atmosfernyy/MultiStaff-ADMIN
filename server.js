@@ -337,19 +337,26 @@ app.post('/api/manage/system-sync/writeoffs', requireSession, async (req, res) =
     const dates = [...byDate.keys()].sort();
     await updateSheetsSyncStatus(cinema, { status:'syncing', lastAttemptAt:admin.firestore.FieldValue.serverTimestamp(), lastDate:dates[dates.length-1], lastError:null });
     let updated = 0;
+    let skipped = 0;
+    const skippedDates = [];
     const issues = [];
     for (const date of dates) {
       const result = await postWriteoffTotalsToSheets(cinema, date, byDate.get(date), {}, config, { force:true });
+      if (result?.skipped === true) {
+        skipped += 1;
+        skippedDates.push(date);
+        continue;
+      }
       updated += Number(result?.updated || 0);
       if (Array.isArray(result?.issues)) issues.push(...result.issues.map(issue => ({date, issue})));
     }
     await recordSystemEvent(cinema, {
       type: issues.length ? 'warning' : 'info', source:'Google Sheets · ручне завантаження',
       title:'Виконано ручне завантаження списань',
-      description:'Оброблено дат: '+dates.length+'; оновлено рядків: '+updated+'; проблем: '+issues.length+'.',
-      metadata:{dates,updated,issueCount:issues.length,ingredientsOnly:true}
+      description:'Оброблено дат: '+dates.length+'; оновлено рядків: '+updated+'; пропущено дат без колонки: '+skipped+'; проблем: '+issues.length+'.',
+      metadata:{dates,updated,skipped,skippedDates,issueCount:issues.length,ingredientsOnly:true}
     });
-    res.json({ok:true,dates:dates.length,updated,issueCount:issues.length,issues:issues.slice(0,30)});
+    res.json({ok:true,dates:dates.length,updated,skippedCount:skipped,skippedDates,issueCount:issues.length,issues:issues.slice(0,30)});
   } catch(error) {
     await updateSheetsSyncStatus(cinema,{status:'error',lastAttemptAt:admin.firestore.FieldValue.serverTimestamp(),lastError:error.message,issueCount:0});
     await recordSystemEvent(cinema,{type:'error',source:'Google Sheets · ручне завантаження',title:'Не вдалося завантажити списання',description:error.message});
@@ -720,6 +727,20 @@ async function postWriteoffTotalsToSheets(cinema, date, ingredients, items, shee
   let result;
   try { result = JSON.parse(bodyText); }
   catch { throw new Error('Google Sheets повернув не JSON (HTTP ' + response.status + ').'); }
+  if (result.ok !== true && /не найдена в строке 2 листа|не знайдена в строці 2 листа/i.test(String(result.error || ''))) {
+    const skipReason = String(result.error || 'У таблиці немає колонки для цієї дати.');
+    await updateSheetsSyncStatus(cinema, {
+      status: 'success',
+      lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastDate: date,
+      lastError: null,
+      updated: 0,
+      issueCount: 0,
+      lastSkippedDate: date
+    });
+    console.log('[Sheets sync] ' + cinema + ' ' + date + ': skipped because the date column is missing.');
+    return { ok: true, skipped: true, skippedReason: skipReason, updated: 0, issues: [] };
+  }
   if (!response.ok || result.ok !== true) {
     throw new Error('Google Sheets: ' + (result.error || ('HTTP ' + response.status)));
   }
