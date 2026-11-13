@@ -260,8 +260,8 @@ app.get('/api/developer/integrations/:cinema', requireDeveloper, async (req, res
       googleSheets: {
         configured: Boolean(process.env.GOOGLE_SHEETS_WEBHOOK_URL && process.env.GOOGLE_SHEETS_SYNC_TOKEN),
         enabled: stored.enabled === true,
-        spreadsheetUrl: stored.spreadsheetUrl || '',
-        spreadsheetId: stored.spreadsheetId || '',
+        spreadsheetUrl: stored.spreadsheetUrl || (cinema.key === 'atmosfera' ? 'https://docs.google.com/spreadsheets/d/18L-HkB0iwNl1kRIhSY5DjsVL0OEdlOuSfJBZb0jqyKM/edit' : ''),
+        spreadsheetId: stored.spreadsheetId || (cinema.key === 'atmosfera' ? '18L-HkB0iwNl1kRIhSY5DjsVL0OEdlOuSfJBZb0jqyKM' : ''),
         tabs: stored.tabs || { ingredients: 'Сировина', items: 'Штучка' },
         mappings: Array.isArray(stored.mappings) ? stored.mappings : [],
         updatedAt: stored.updatedAt || null,
