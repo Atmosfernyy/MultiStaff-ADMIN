@@ -170,3 +170,34 @@ body.developer-locked .shell{filter:blur(5px);pointer-events:none;user-select:no
 
 /* Google Sheets integration settings */
 .sheets-settings-form{display:grid;gap:18px;margin-top:18px}.field-label{display:block;color:var(--muted);font-size:12px;font-weight:700;margin:0 0 7px}.sheets-settings-form input,.sheets-settings-form select{width:100%;min-width:0;background:#111318;border:1px solid var(--border);border-radius:9px;color:var(--text);padding:11px 12px;font:inherit}.sheets-settings-form input:focus,.sheets-settings-form select:focus{outline:1px solid var(--red);border-color:var(--red)}.grid-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.sheets-mappings{display:grid;gap:9px}.sheets-mapping-row{display:grid;grid-template-columns:125px minmax(130px,1fr) 22px minmax(130px,1fr) 34px;gap:8px;align-items:center;padding:9px;background:var(--side);border:1px solid var(--border);border-radius:10px}.mapping-arrow{text-align:center;color:var(--muted);font-size:18px}.icon-button{height:36px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--muted);font-size:20px;cursor:pointer}.icon-button:hover{color:#ff6974;border-color:#8e3942}.form-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.form-actions .primary,.sectionhead .secondary{border:1px solid var(--border);border-radius:9px;padding:10px 14px;background:#292c35;color:var(--text);font:inherit;font-weight:700;cursor:pointer}.form-actions .primary{background:var(--red);border-color:var(--red);color:white}.form-actions button:disabled{opacity:.6;cursor:wait}.sheets-settings-form .feature-row{margin:0;padding:13px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}@media(max-width:760px){.grid-two{grid-template-columns:1fr}.sheets-mapping-row{grid-template-columns:1fr 1fr}.sheets-mapping-row .mapping-arrow{display:none}.sheets-mapping-row select{grid-column:1/-1}.sheets-mapping-row .icon-button{grid-column:2;justify-self:end;width:38px}}
+
+
+/* MultiStaff System Monitor */
+.system-monitor-panel{display:grid;gap:13px}
+.system-monitor-events{display:grid;gap:10px}
+.system-monitor-ok{display:flex;align-items:center;gap:13px;padding:18px;border:1px solid #285441;border-radius:11px;background:#14231d}
+.system-monitor-ok.compact{padding:13px}
+.monitor-check{display:grid;place-items:center;flex:0 0 34px;height:34px;border-radius:50%;background:#1d4936;color:#70e0ae;font-size:19px;font-weight:800}
+.system-monitor-ok>div{display:grid;gap:5px}
+.system-monitor-ok b{color:#8ce7bd;font-size:13px}
+.system-monitor-ok small{color:#9baea5;font-size:11px}
+.monitor-count{font-size:11px;color:#c2c4ce}
+.monitor-list{display:grid;gap:8px}
+.monitor-event{display:grid;grid-template-columns:30px minmax(0,1fr) auto;align-items:start;gap:11px;padding:13px;border:1px solid var(--border);border-radius:10px;background:#15171d}
+.monitor-event-mark{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#343027;color:#f3c66d;font-weight:800}
+.monitor-event.error .monitor-event-mark{background:#3a2025;color:#ff8991}
+.monitor-event.info .monitor-event-mark{background:#202d3d;color:#8dbdff}
+.monitor-event-body{min-width:0;display:grid;gap:6px}
+.monitor-event-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.monitor-event-top>b{font-size:12px}
+.monitor-event-body p{margin:0;color:#c4c6cf;font-size:11px;line-height:1.55;overflow-wrap:anywhere}
+.monitor-event-body>small{color:var(--muted);font-size:10px}
+.monitor-pill{padding:4px 7px;border-radius:20px;background:#3a3020;color:#f1c56b;font-size:9px;white-space:nowrap}
+.monitor-pill.error{background:#3a2025;color:#ff8991}
+.monitor-pill.info{background:#202d3d;color:#8dbdff}
+.monitor-pill.resolved{background:#1d3b2e;color:#78dcb0}
+.monitor-event.resolved{opacity:.72}
+.monitor-event>button{padding:7px 9px;border:1px solid #41434d;border-radius:7px;background:#22252d;color:#d5d6dd;font:inherit;font-size:10px;cursor:pointer}
+.monitor-event>button:hover{border-color:#557c68;color:#8ce7bd}
+.monitor-error{padding:14px;border:1px solid #63343b;border-radius:9px;color:#ff9aa1;font-size:12px}
+@media(max-width:700px){.monitor-event{grid-template-columns:28px minmax(0,1fr)}.monitor-event>button{grid-column:2;justify-self:start}}
