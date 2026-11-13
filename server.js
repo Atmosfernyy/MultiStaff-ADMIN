@@ -303,6 +303,34 @@ app.put('/api/developer/integrations/:cinema', requireDeveloper, async (req, res
 });
 
 
+
+app.get('/api/manage/system-status', requireSession, async (req, res) => {
+  try {
+    const cinema = sessionCinema(req);
+    const db = dbForSession(req);
+    const [configSnap, syncSnap] = await Promise.all([
+      db.collection('Cinema').doc(cinema).collection('BotConfig').doc('googleSheets').get(),
+      db.collection('Cinema').doc(cinema).collection('SystemStatus').doc('googleSheets').get()
+    ]);
+    const config = configSnap.exists ? configSnap.data() : {};
+    const sync = syncSnap.exists ? syncSnap.data() : {};
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      cinema,
+      webhookConfigured: Boolean(process.env.GOOGLE_SHEETS_WEBHOOK_URL && process.env.GOOGLE_SHEETS_SYNC_TOKEN),
+      enabled: config.enabled === true,
+      spreadsheetConfigured: Boolean(config.spreadsheetId),
+      lastStatus: sync.status || 'never',
+      lastAttemptAt: sync.lastAttemptAt || null,
+      lastSuccessAt: sync.lastSuccessAt || null,
+      lastDate: sync.lastDate || null,
+      updated: Number(sync.updated || 0),
+      issueCount: Number(sync.issueCount || 0),
+      lastError: sync.lastError || null
+    });
+  } catch (error) { publicError(res, error); }
+});
+
 app.get('/api/manage/system-events', requireSession, async (req, res) => {
   try {
     const snap = await dbForSession(req).collection('Cinema').doc(sessionCinema(req))
@@ -587,21 +615,44 @@ async function recordSystemEvent(cinema, event) {
   }
 }
 
+
+async function updateSheetsSyncStatus(cinema, values) {
+  try {
+    await getFirestore(cinema).collection('Cinema').doc(cinema)
+      .collection('SystemStatus').doc('googleSheets').set({
+        ...values,
+        checkedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+  } catch (error) {
+    console.error('[Sheets sync] Could not update status for ' + cinema + ':', error.message);
+  }
+}
+
 async function postWriteoffTotalsToSheets(cinema, date, ingredients, items, sheetsConfig = null) {
   const url = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
   const token = process.env.GOOGLE_SHEETS_SYNC_TOKEN;
-  if (!url || !token) throw new Error('Google Sheets sync environment variables are missing.');
+  if (!url || !token) throw new Error('Google Sheets webhook URL або токен не налаштовано.');
+  if (sheetsConfig?.enabled !== true) {
+    await updateSheetsSyncStatus(cinema, {
+      status: 'disabled', lastDate: date, lastError: null, issueCount: 0
+    });
+    console.log('[Sheets sync] ' + cinema + ': skipped because automatic sync is disabled.');
+    return;
+  }
+  if (!sheetsConfig.spreadsheetId) throw new Error('Не вказано ID Google-таблиці в конфігурації кінотеатру.');
 
-  const payload = sheetsConfig?.enabled === true
-    ? {
-        token, cinema, date, ingredients, items,
-        config: {
-          spreadsheetId: sheetsConfig.spreadsheetId,
-          tabs: sheetsConfig.tabs || { ingredients: 'Сировина', items: 'Штучка' },
-          mappings: Array.isArray(sheetsConfig.mappings) ? sheetsConfig.mappings : []
-        }
-      }
-    : { token, cinema, date, ingredients };
+  await updateSheetsSyncStatus(cinema, {
+    status: 'syncing', lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastDate: date, lastError: null
+  });
+  const payload = {
+    token, cinema, date, ingredients, items,
+    config: {
+      spreadsheetId: sheetsConfig.spreadsheetId,
+      tabs: sheetsConfig.tabs || { ingredients: 'Сировина', items: 'Штучка' },
+      mappings: Array.isArray(sheetsConfig.mappings) ? sheetsConfig.mappings : []
+    }
+  };
 
   const response = await fetch(url, {
     method: 'POST',
@@ -612,25 +663,30 @@ async function postWriteoffTotalsToSheets(cinema, date, ingredients, items, shee
   const bodyText = await response.text();
   let result;
   try { result = JSON.parse(bodyText); }
-  catch { throw new Error('Google Sheets returned a non-JSON response (HTTP ' + response.status + ').'); }
+  catch { throw new Error('Google Sheets повернув не JSON (HTTP ' + response.status + ').'); }
   if (!response.ok || result.ok !== true) {
-    throw new Error('Google Sheets sync failed: ' + (result.error || ('HTTP ' + response.status)));
+    throw new Error('Google Sheets: ' + (result.error || ('HTTP ' + response.status)));
   }
-  if (Array.isArray(result.issues) && result.issues.length) {
-    for (const issue of result.issues) {
-      const description = typeof issue === 'string' ? issue : JSON.stringify(issue);
-      await recordSystemEvent(cinema, {
-        type: 'warning',
-        source: 'Google Sheets · ' + date,
-        title: 'Проблема під час перенесення списань',
-        description,
-        metadata: { date }
-      });
-    }
-    console.error('[Sheets sync] ' + cinema + ' ' + date + ' issues:', JSON.stringify(result.issues));
+  const issues = Array.isArray(result.issues) ? result.issues : [];
+  for (const issue of issues) {
+    const description = typeof issue === 'string' ? issue : JSON.stringify(issue);
+    await recordSystemEvent(cinema, {
+      type: 'warning', source: 'Google Sheets · ' + date,
+      title: 'Проблема під час перенесення списань',
+      description, metadata: { date }
+    });
   }
-  console.log('[Sheets sync] ' + cinema + ' (' + (result.sheets || result.sheet || 'Google Sheets') + ') ' + date +
-    ': updated ' + (result.updated ?? 0) + ' rows; issues ' + (result.issues?.length || 0) + '.');
+  await updateSheetsSyncStatus(cinema, {
+    status: issues.length ? 'warning' : 'success',
+    lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastSuccessAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastDate: date,
+    updated: Number(result.updated || 0),
+    issueCount: issues.length,
+    lastError: issues.length ? issues.slice(0, 10).map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' | ').slice(0, 1500) : null
+  });
+  console.log('[Sheets sync] ' + cinema + ' ' + date + ': updated ' +
+    (result.updated ?? 0) + ' rows; issues ' + issues.length + '.');
 }
 
 function startWriteoffSheetsSync() {
@@ -682,6 +738,12 @@ function startWriteoffSheetsSync() {
           }
         }).catch(async error => {
           console.error('[Sheets sync] ' + cinema + ' listener processing failed:', error.message);
+          await updateSheetsSyncStatus(cinema, {
+            status: 'error',
+            lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastError: error.message,
+            issueCount: 0
+          });
           await recordSystemEvent(cinema, {
             type: 'error',
             source: 'Google Sheets sync',
