@@ -226,3 +226,35 @@ body.developer-locked .shell{filter:blur(5px);pointer-events:none;user-select:no
 .system-monitor-panel[hidden]{display:none!important}
 .monitor-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .monitor-actions button{white-space:nowrap}
+
+
+/* Multiplex sessions configuration */
+.nav-group.expanded .nav-children{display:grid}
+.nav-children{display:none;gap:5px;padding:2px 0 4px 14px}
+.nav-sub{border:1px solid transparent;border-radius:9px;padding:11px 11px 11px 13px;text-align:left;background:transparent;color:#9fa1ad;cursor:pointer;font:inherit;font-size:12px}
+.nav-sub:hover{background:#1c1e24;color:#ddd}
+.nav-sub.active{background:#ed3b4818;border-color:#ed3b4830;color:#ff6873}
+.session-settings-panel{display:grid;gap:20px}
+.sessions-settings-form{display:grid;gap:20px}
+.session-global-grid{display:grid;grid-template-columns:minmax(190px,1fr) minmax(180px,1fr);gap:12px 18px;align-items:center;padding:17px;border:1px solid var(--border);border-radius:12px;background:#14161b}
+.session-global-grid>label{font-size:12px;color:#d6d7df}
+.session-global-grid>label:first-child{display:grid;gap:5px}
+.session-time-row{display:flex;align-items:center;gap:8px}
+.session-time-row input,.session-time-row select,.session-cinema-card input{width:100%;min-width:0;padding:11px 12px;border:1px solid #393b45;border-radius:9px;background:#101116;color:var(--text);font:inherit;font-size:12px}
+.session-cinemas-title{margin:0}
+.session-cinemas-title h3{font-size:14px;margin:0 0 5px}
+.session-cinema-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.session-cinema-card{min-width:0;padding:16px;border:1px solid var(--border);border-radius:12px;background:linear-gradient(145deg,#1b1d23,#15171c)}
+.session-cinema-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:17px}
+.session-cinema-head>div{display:grid;gap:5px}
+.session-cinema-head b{font-size:13px}
+.session-cinema-head small,.session-sheet-id span{font-size:10px;color:var(--muted)}
+.session-cinema-card .field-label{display:block;margin-bottom:8px;font-size:11px;color:#c6c7d0}
+.session-sheet-id{display:grid;gap:7px;margin-top:12px;padding:10px;border:1px solid #2c2e37;border-radius:8px;background:#111318}
+.session-sheet-id code{font-size:10px;color:#9ca9c3;overflow-wrap:anywhere}
+.sessions-settings-form .form-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.integration-help{padding:14px 16px;border:1px solid #35313a;border-radius:10px;background:#17171d}
+.integration-help b{font-size:12px}
+.integration-help p{margin:6px 0 0;color:var(--muted);font-size:11px;line-height:1.7}
+@media(max-width:1000px){.session-cinema-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:650px){.session-global-grid{grid-template-columns:1fr 1fr}.session-cinema-grid{grid-template-columns:1fr}.session-time-row{flex-wrap:wrap}}
