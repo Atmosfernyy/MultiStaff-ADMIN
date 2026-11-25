@@ -432,7 +432,7 @@ async function loadSessionsSettings() {
           },
           cinemas: cinemaConfig
         })});
-        status.textContent = 'Збережено в конфігурації Developer.';
+        status.textContent = result.parserApi?.synced ? 'Збережено та синхронізовано з Parser API. Таблиці: ' + (result.parserApi.persistedToSheets || []).join(', ') : (result.parserApi?.configured ? 'Збережено в Firebase, але Parser API не синхронізувався: ' + (result.parserApi.error || 'невідома помилка') : 'Збережено в Firebase. Для зв’язку додайте URL і токен Parser API у Northflank ADMIN.');
         toast('Налаштування сеансів збережено');
         await loadSessionsSettings();
       } catch(error) { status.textContent = error.message; }
