@@ -3,6 +3,7 @@ const pages = {
   developer: ['Developer', 'Developer', 'Інструменти розробника, інтеграції та керування Telegram-ботами.'],
   features: ['Функції бота', 'Функції бота', 'Управління доступністю розділів Telegram-бота.'],
   integrations: ['Інтеграції', 'Інтеграції', 'Підключення зовнішніх сервісів та синхронізація даних.'],
+  sessions: ['Сеанси', 'Сеанси', 'Налаштування парсера розкладу Multiplex та таблиць кожного кінотеатру.'],
   staff: ['Працівники', 'Працівники', 'Користувачі, ролі, Telegram ID та права доступу.'],
   data: ['Дані кінотеатру', 'Дані кінотеатру', 'Рецепти та списання вибраного кінотеатру.'],
   diagnostics: ['Діагностика', 'Діагностика', 'Стан сервера, Firebase та оновлення даних.'],
@@ -209,6 +210,7 @@ const PAGE_PATHS = {
   developer: '/developer',
   features: '/developer/bot-functions',
   integrations: '/developer/integrations',
+  sessions: '/developer/sessions',
   staff: '/staff',
   data: '/cinema-data',
   diagnostics: '/stats',
@@ -232,7 +234,7 @@ function showPage(key, options = {}) {
   document.querySelector('#crumb').textContent = p[1];
   document.querySelector('#description').textContent = p[2];
   document.querySelectorAll('[data-page]').forEach(el => el.classList.toggle('active', el.dataset.page === currentPage));
-  document.querySelector('.nav-group')?.classList.toggle('expanded', ['developer','features','integrations'].includes(currentPage));
+  document.querySelector('.nav-group')?.classList.toggle('expanded', ['developer','features','integrations','sessions'].includes(currentPage));
   document.querySelector('#sidebar').classList.remove('open');
   const workspace = document.querySelector('#workspace');
   if (currentPage === 'overview') {
@@ -246,6 +248,7 @@ function showPage(key, options = {}) {
   workspace.innerHTML = '<div class="panel"><p>Завантаження…</p></div>';
   if (currentPage === 'developer') renderDeveloperHome();
   else if (currentPage === 'integrations') loadIntegrations();
+  else if (currentPage === 'sessions') loadSessionsSettings();
   else if (currentPage === 'staff') loadStaff();
   else if (currentPage === 'data') renderDataPage();
   else if (currentPage === 'activity') loadActivity();
@@ -280,6 +283,7 @@ function developerGate() {
         document.body.classList.remove('developer-locked');
         if (currentPage === 'features') await loadBotFeatures(featureCinema);
         else if (currentPage === 'integrations') await loadIntegrations();
+        else if (currentPage === 'sessions') await loadSessionsSettings();
         else if (currentPage === 'developer') renderDeveloperHome();
         else await loadBotFeatures(featureCinema);
       } catch (error) { errorEl.textContent = error.message; }
@@ -357,6 +361,78 @@ async function loadIntegrations() {
 function sheetsMappingRow(mapping = {}, index = 0) {
   return '<div class="sheets-mapping-row"><select data-map-category aria-label="Тип товару"><option value="ingredients" '+(mapping.category !== 'items' ? 'selected' : '')+'>Сировина</option><option value="items" '+(mapping.category === 'items' ? 'selected' : '')+'>Штучка</option></select><input data-map-bot placeholder="Назва в боті" value="'+escapeHtml(mapping.botName || '')+'"><span class="mapping-arrow">→</span><input data-map-sheet placeholder="Назва в таблиці" value="'+escapeHtml(mapping.sheetName || '')+'"><button type="button" class="icon-button" data-remove-mapping aria-label="Видалити відповідність">×</button></div>';
 }
+
+async function loadSessionsSettings() {
+  if (!developerUnlocked) {
+    try { const state = await api('/api/developer/me'); developerUnlocked = state.authenticated === true; }
+    catch { developerUnlocked = false; }
+  }
+  if (!developerUnlocked) {
+    workspace().innerHTML = '<section class="panel"><h2>Сеанси Multiplex</h2><p class="muted">Цей розділ потребує окремого Developer-входу.</p><button class="primary" data-action="developer-login">Увійти як Developer</button></section>';
+    developerGate(); return;
+  }
+  try {
+    const result = await api('/api/developer/sessions');
+    const cfg = result.config || {};
+    const parser = cfg.parser || {};
+    const cinemas = cfg.cinemas || {};
+    const defaults = [
+      {key:'atmosfera',label:'Atmosfera',url:'https://docs.google.com/spreadsheets/d/1tuCtrz3PaKbch02XLG-10W6Ob4AwdJjpW0PjH5hCOpo/edit',enabled:true},
+      {key:'karavan',label:'Karavan',url:'https://docs.google.com/spreadsheets/d/1MW0m-soyVUkz7CKKQ-9PQkSFnwpARIS0zSdpwxPImJ0/edit',enabled:true},
+      {key:'retroville',label:'Retroville',url:'',enabled:false}
+    ];
+    const cards = defaults.map(item => {
+      const saved = cinemas[item.key] || {};
+      const url = saved.spreadsheetUrl ?? item.url;
+      const enabled = typeof saved.enabled === 'boolean' ? saved.enabled : item.enabled;
+      const sheetId = saved.spreadsheetId || (url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/) || [])[1] || '';
+      return '<article class="session-cinema-card"><div class="session-cinema-head"><div><b>'+item.label+'</b><small>'+ (item.key === 'retroville' ? 'Підключення відкладено' : 'Окрема таблиця архіву розкладу') +'</small></div><label class="switch"><input type="checkbox" data-session-enabled="'+item.key+'" '+(enabled?'checked':'')+'><span></span></label></div><label class="field-label" for="sessionUrl-'+item.key+'">Посилання на Google Sheets</label><input class="session-sheet-url" id="sessionUrl-'+item.key+'" data-session-url="'+item.key+'" type="url" placeholder="https://docs.google.com/spreadsheets/d/..." value="'+escapeHtml(url)+'"><div class="session-sheet-id"><span>ID таблиці</span><code data-session-id="'+item.key+'">'+escapeHtml(sheetId || 'Не вказано')+'</code></div></article>';
+    }).join('');
+    workspace().innerHTML = '<section class="panel session-settings-panel"><div class="workspace-head"><div><h2>Парсер розкладу Multiplex</h2><p class="muted">Загальні параметри збору. Часовий пояс — Europe/Kyiv.</p></div><span class="pill success">Конфігурація</span></div><form id="sessionsSettingsForm" class="sessions-settings-form"><div class="session-global-grid"><label><span>Автоматичний збір</span><span class="muted">Увімкнути щотижневий запуск</span></label><label class="switch"><input id="sessionParserEnabled" type="checkbox" '+(parser.enabled !== false?'checked':'')+'><span></span></label><label for="sessionStartTime">Запуск щотижня</label><div class="session-time-row"><select id="sessionWeekday"><option value="tuesday" '+((parser.weekday||'tuesday')==='tuesday'?'selected':'')+'>Вівторок</option></select><input id="sessionStartTime" type="time" value="'+escapeHtml(parser.startTime || '00:00')+'"></div><label for="sessionEndTime">Завершення вікна збору</label><div class="session-time-row"><select id="sessionEndDay"><option value="wednesday" '+((parser.endDay||'wednesday')==='wednesday'?'selected':'')+'>Середа</option></select><input id="sessionEndTime" type="time" value="'+escapeHtml(parser.endTime || '08:00')+'"></div><label for="sessionDelay">Затримка між запитами</label><div class="session-time-row"><input id="sessionDelay" type="number" min="500" max="30000" step="100" value="'+Number(parser.requestDelayMs || 1500)+'"><span class="muted">мс</span></div><label for="sessionRetries">Повторні спроби</label><input id="sessionRetries" type="number" min="0" max="5" value="'+Number(parser.retryCount ?? 2)+'"></div><div class="sectionhead session-cinemas-title"><div><h3>Таблиці кінотеатрів</h3><p>Кожен кінотеатр має власний Google Sheets ID. API не змішує таблиці.</p></div></div><div class="session-cinema-grid">'+cards+'</div><div class="form-actions"><button class="primary" type="submit">Зберегти налаштування</button><span id="sessionsSaveStatus" class="muted small"></span></div></form><div class="integration-help"><b>Як працює прив’язка</b><p>ADMIN зберігає окремий ID для Atmosfera, Karavan та Retroville. Ці параметри поки зберігаються в конфігурації Developer у Firebase; наступним кроком підключимо передачу їх до Multiplex Parser API.</p></div></section>';
+    document.querySelectorAll('[data-session-url]').forEach(input => input.addEventListener('input', () => {
+      const key = input.dataset.sessionUrl;
+      const id = (input.value.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/) || [])[1] || ( /^[a-zA-Z0-9_-]{20,}$/.test(input.value.trim()) ? input.value.trim() : '');
+      const target = document.querySelector('[data-session-id="'+key+'"]');
+      if (target) target.textContent = id || 'Не вказано';
+    }));
+    document.querySelector('#sessionsSettingsForm')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector('button[type="submit"]');
+      const status = document.querySelector('#sessionsSaveStatus');
+      button.disabled = true; status.textContent = 'Збереження…';
+      try {
+        const cinemaConfig = {};
+        for (const key of ['atmosfera','karavan','retroville']) {
+          cinemaConfig[key] = {
+            enabled: document.querySelector('[data-session-enabled="'+key+'"]').checked,
+            spreadsheetUrl: document.querySelector('[data-session-url="'+key+'"]').value.trim()
+          };
+        }
+        await api('/api/developer/sessions', {method:'PUT', body:JSON.stringify({
+          parser: {
+            enabled: document.querySelector('#sessionParserEnabled').checked,
+            weekday: document.querySelector('#sessionWeekday').value,
+            startTime: document.querySelector('#sessionStartTime').value,
+            endDay: document.querySelector('#sessionEndDay').value,
+            endTime: document.querySelector('#sessionEndTime').value,
+            requestDelayMs: Number(document.querySelector('#sessionDelay').value),
+            retryCount: Number(document.querySelector('#sessionRetries').value)
+          },
+          cinemas: cinemaConfig
+        })});
+        status.textContent = 'Збережено в конфігурації Developer.';
+        toast('Налаштування сеансів збережено');
+        await loadSessionsSettings();
+      } catch(error) { status.textContent = error.message; }
+      finally { if (button.isConnected) button.disabled = false; }
+    });
+  } catch(error) {
+    workspace().innerHTML = '<section class="panel"><h2>Не вдалося завантажити налаштування сеансів</h2><p class="form-error">'+escapeHtml(error.message)+'</p></section>';
+    if (error.message.includes('Developer-авторизація')) { developerUnlocked = false; developerGate(); }
+  }
+}
+
 async function openDeveloperFeatures() {
   if (!developerUnlocked) {
     try {
