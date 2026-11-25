@@ -246,6 +246,64 @@ app.put('/api/developer/features/:cinema/:feature', requireDeveloper, async (req
   } catch (error) { publicError(res, error); }
 });
 
+
+const MULTIPLEX_DEFAULT_CONFIG = {
+  parser: { enabled: true, weekday: 'tuesday', startTime: '00:00', endDay: 'wednesday', endTime: '08:00', requestDelayMs: 1500, retryCount: 2 },
+  cinemas: {
+    atmosfera: { enabled: true, spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/1tuCtrz3PaKbch02XLG-10W6Ob4AwdJjpW0PjH5hCOpo/edit', spreadsheetId: '1tuCtrz3PaKbch02XLG-10W6Ob4AwdJjpW0PjH5hCOpo' },
+    karavan: { enabled: true, spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/1MW0m-soyVUkz7CKKQ-9PQkSFnwpARIS0zSdpwxPImJ0/edit', spreadsheetId: '1MW0m-soyVUkz7CKKQ-9PQkSFnwpARIS0zSdpwxPImJ0' },
+    retroville: { enabled: false, spreadsheetUrl: '', spreadsheetId: '' }
+  }
+};
+function parseSpreadsheetReference(value) {
+  const input = cleanText(value, 1000);
+  if (!input) return { url: '', id: '' };
+  const match = input.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  const id = match?.[1] || (/^[a-zA-Z0-9_-]{20,}$/.test(input) ? input : '');
+  if (!id) throw Object.assign(new Error('Для кожного кінотеатру вкажіть коректне посилання Google Sheets або ID таблиці.'), { status: 400 });
+  return { url: match ? input : 'https://docs.google.com/spreadsheets/d/' + id + '/edit', id };
+}
+app.get('/api/developer/sessions', requireDeveloper, async (_req, res) => {
+  try {
+    const ref = getFirestore('atmosfera').collection('Cinema').doc('atmosfera').collection('BotConfig').doc('multiplexParser');
+    const snap = await ref.get();
+    const stored = snap.exists ? (snap.data() || {}) : {};
+    const config = {
+      parser: { ...MULTIPLEX_DEFAULT_CONFIG.parser, ...(stored.parser || {}) },
+      cinemas: { ...MULTIPLEX_DEFAULT_CONFIG.cinemas, ...(stored.cinemas || {}) }
+    };
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, configured: snap.exists, config });
+  } catch (error) { publicError(res, error); }
+});
+app.put('/api/developer/sessions', requireDeveloper, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const parser = body.parser || {};
+    const weekday = parser.weekday === 'tuesday' ? 'tuesday' : null;
+    const endDay = parser.endDay === 'wednesday' ? 'wednesday' : null;
+    const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+    if (!weekday || !endDay || !timePattern.test(String(parser.startTime || '')) || !timePattern.test(String(parser.endTime || ''))) {
+      throw Object.assign(new Error('Перевірте день та час запуску і завершення збору.'), { status: 400 });
+    }
+    const requestDelayMs = Number(parser.requestDelayMs);
+    const retryCount = Number(parser.retryCount);
+    if (!Number.isInteger(requestDelayMs) || requestDelayMs < 500 || requestDelayMs > 30000) throw Object.assign(new Error('Затримка має бути від 500 до 30000 мс.'), { status: 400 });
+    if (!Number.isInteger(retryCount) || retryCount < 0 || retryCount > 5) throw Object.assign(new Error('Кількість повторів має бути від 0 до 5.'), { status: 400 });
+    const parserConfig = { enabled: parser.enabled === true, weekday, startTime: parser.startTime, endDay, endTime: parser.endTime, timezone: 'Europe/Kyiv', requestDelayMs, retryCount };
+    const cinemas = {};
+    for (const key of ['atmosfera','karavan','retroville']) {
+      const input = body.cinemas?.[key] || {};
+      const parsed = parseSpreadsheetReference(input.spreadsheetUrl || '');
+      cinemas[key] = { enabled: input.enabled === true && Boolean(parsed.id), spreadsheetUrl: parsed.url, spreadsheetId: parsed.id };
+    }
+    const ref = getFirestore('atmosfera').collection('Cinema').doc('atmosfera').collection('BotConfig').doc('multiplexParser');
+    await ref.set({ parser: parserConfig, cinemas, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: req.session.developerName || 'Developer' }, { merge: true });
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true, config: { parser: parserConfig, cinemas } });
+  } catch (error) { publicError(res, error); }
+});
+
 app.get('/api/developer/integrations/:cinema', requireDeveloper, async (req, res) => {
   try {
     const cinema = PROJECTS.find(project => project.key === req.params.cinema);
