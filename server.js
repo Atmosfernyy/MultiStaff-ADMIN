@@ -299,8 +299,42 @@ app.put('/api/developer/sessions', requireDeveloper, async (req, res) => {
     }
     const ref = getFirestore('atmosfera').collection('Cinema').doc('atmosfera').collection('BotConfig').doc('multiplexParser');
     await ref.set({ parser: parserConfig, cinemas, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: req.session.developerName || 'Developer' }, { merge: true });
+    let parserApi = { configured: Boolean(process.env.MULTIPLEX_PARSER_API_URL && process.env.MULTIPLEX_PARSER_API_TOKEN), synced: false };
+    if (parserApi.configured) {
+      try {
+        const base = process.env.MULTIPLEX_PARSER_API_URL.replace(/\\/$/, '');
+        const response = await fetch(base + '/admin/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + process.env.MULTIPLEX_PARSER_API_TOKEN },
+          body: JSON.stringify({ parser: parserConfig, cinemas })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Parser API returned HTTP ' + response.status);
+        parserApi = { configured: true, synced: true, persistedToSheets: payload.persistedToSheets || [] };
+      } catch (syncError) {
+        console.error('Multiplex Parser API sync failed:', syncError.message);
+        parserApi = { configured: true, synced: false, error: syncError.message };
+      }
+    }
     res.set('Cache-Control', 'no-store');
-    res.json({ ok: true, config: { parser: parserConfig, cinemas } });
+    res.json({ ok: true, config: { parser: parserConfig, cinemas }, parserApi });
+  } catch (error) { publicError(res, error); }
+});
+
+app.post('/api/developer/sessions/run', requireDeveloper, async (req, res) => {
+  try {
+    if (!process.env.MULTIPLEX_PARSER_API_URL || !process.env.MULTIPLEX_PARSER_API_TOKEN) {
+      throw Object.assign(new Error('Спочатку налаштуйте MULTIPLEX_PARSER_API_URL та MULTIPLEX_PARSER_API_TOKEN у Northflank ADMIN.'), { status: 503 });
+    }
+    const base = process.env.MULTIPLEX_PARSER_API_URL.replace(/\\/$/, '');
+    const response = await fetch(base + '/admin/jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + process.env.MULTIPLEX_PARSER_API_TOKEN },
+      body: JSON.stringify({ cinema: req.body?.cinema || 'all' })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error(payload.error || 'Parser API returned HTTP ' + response.status), { status: response.status });
+    res.status(202).json(payload);
   } catch (error) { publicError(res, error); }
 });
 
